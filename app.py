@@ -5,8 +5,11 @@ import math
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(page_title="Loan vs Investment Tracker", layout="wide")
-
+st.set_page_config(
+    page_title="Home Loan + Investment Tracker", 
+    page_icon="🏡", 
+    layout="wide"
+)
 # Initialize Session State for Edit Mode
 if "edit_portfolio" not in st.session_state:
     st.session_state.edit_portfolio = False
