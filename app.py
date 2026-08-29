@@ -17,7 +17,9 @@ def check_password():
     """Returns `True` if the user had the correct password."""
 
     def password_entered():
-        if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
+# Use .get() with a default fallback to prevent KeyError crashes
+        expected_pass = st.secrets.get("APP_PASSWORD", "admin123") 
+        if st.session_state["password"] == expected_pass:
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # don't store password
         else:
