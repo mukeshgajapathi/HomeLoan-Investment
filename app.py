@@ -417,19 +417,16 @@ with sec2_col2:
                     df_portfolio.at[i, "Current_LTP"] = r["Invested_Value"] / r["Units_Accumulated"]
 
             df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
-            new_total_val = df_portfolio["Current_Value"].sum()
-            new_total_inv = df_portfolio["Invested_Value"].sum()
+# Round totals before appending to Investment_Log
+new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
+new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
 
-            df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
-            conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
-            
-            snapshot_row = pd.DataFrame([{
-                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "Month_Year": datetime.now().strftime("%b %Y"),
-                "Total_Invested": new_total_inv,
-                "Total_Value": new_total_val
-            }])
-            
+snapshot_row = pd.DataFrame([{
+    "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    "Month_Year": datetime.now().strftime("%b %Y"),
+    "Total_Invested": new_total_inv,
+    "Total_Value": new_total_val
+}])
             updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
             conn.update(worksheet="Investment_Log", data=updated_inv_log)
             
@@ -525,10 +522,12 @@ st.subheader("📈 Portfolio Valuation & Growth Timeline")
 if not df_inv_log.empty:
     try:
         df_chart = df_inv_log.copy()
-        df_chart["Total_Invested"] = pd.to_numeric(df_chart["Total_Invested"], errors='coerce')
-        df_chart["Total_Value"] = pd.to_numeric(df_chart["Total_Value"], errors='coerce')
         
-        # Pick the latest appended row per month directly from Google Sheets order
+        # Convert and round to 2 decimal places for clean tooltips
+        df_chart["Total_Invested"] = pd.to_numeric(df_chart["Total_Invested"], errors='coerce').round(2)
+        df_chart["Total_Value"] = pd.to_numeric(df_chart["Total_Value"], errors='coerce').round(2)
+        
+        # Pick the latest appended row per month
         df_monthly = df_chart.groupby("Month_Year", sort=False).last().reset_index()
         
         df_monthly_chart = df_monthly.set_index("Month_Year")[["Total_Invested", "Total_Value"]]
