@@ -197,7 +197,7 @@ min_prepayment_allowed = 2 * full_emi
 corpus_4_pct = 0.04 * total_portfolio_val
 
 # --- DASHBOARD HEADER ---
-st.title("🏡 Home Loan & 📈 Investment Tracker")
+st.title("Home Loan & Investment Tracker")
 
 st.subheader("🎯 Net-Debt-Zero Visualizer")
 net_debt = current_principal - total_portfolio_val
