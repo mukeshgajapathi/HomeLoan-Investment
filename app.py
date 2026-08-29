@@ -296,7 +296,8 @@ else:
     is_current_month_paid = False
 
 with st.form("emi_form", clear_on_submit=True):
-    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
+    # Adjusted to 3 equal columns since the checkbox is removed
+    c1, c2, c3 = st.columns(3)
     
     c1.text_input("Month-Year", value=current_month_str, disabled=True)
     
@@ -311,9 +312,6 @@ with st.form("emi_form", clear_on_submit=True):
         else:
             st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
 
-    with c4:
-        confirmed = st.checkbox("Confirm Payment", value=True, disabled=is_current_month_paid)
-
     if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid, use_container_width=True):
         new_row = pd.DataFrame([{
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
@@ -321,7 +319,7 @@ with st.form("emi_form", clear_on_submit=True):
             "Expected_Payment": expected_loan, 
             "Actual_Payment": expected_loan, 
             "Payment_Type": payment_type, 
-            "Confirmed": confirmed
+            "Confirmed": True  # Backend flag maintained as True
         }])
         conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
         st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
