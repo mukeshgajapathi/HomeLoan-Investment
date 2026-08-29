@@ -525,11 +525,10 @@ st.subheader("📈 Portfolio Valuation & Growth Timeline")
 if not df_inv_log.empty:
     try:
         df_chart = df_inv_log.copy()
-        df_chart["Date_DT"] = pd.to_datetime(df_chart["Date"])
         df_chart["Total_Invested"] = pd.to_numeric(df_chart["Total_Invested"], errors='coerce')
         df_chart["Total_Value"] = pd.to_numeric(df_chart["Total_Value"], errors='coerce')
         
-        df_chart = df_chart.sort_values("Date_DT")
+        # Pick the latest appended row per month directly from Google Sheets order
         df_monthly = df_chart.groupby("Month_Year", sort=False).last().reset_index()
         
         df_monthly_chart = df_monthly.set_index("Month_Year")[["Total_Invested", "Total_Value"]]
