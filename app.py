@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import math
+import urllib.request
+import json
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
@@ -43,10 +45,6 @@ if not check_password():
 # --- APP LOGIC (RUNS IF AUTHENTICATED) ---
 # ==========================================
 
-# Initialize Session State for Edit Mode
-if "edit_portfolio" not in st.session_state:
-    st.session_state.edit_portfolio = False
-
 # --- HELPER: INDIAN CURRENCY FORMATTER ---
 def format_inr(value):
     try:
@@ -65,9 +63,23 @@ def format_inr(value):
     except ValueError:
         return "₹0"
 
-# --- ROBUST LIVE LTP FETCHING ---
+# --- LIVE LTP FETCHING (ETF VIA YFINANCE & MUTUAL FUND VIA AMFI API) ---
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker):
+    # Fetch Mutual Fund NAV via official AMFI API code
+    if ticker.startswith("AMFI:"):
+        scheme_code = ticker.split(":")[1]
+        try:
+            url = f"https://api.mfapi.in/mf/{scheme_code}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                if "data" in data and len(data["data"]) > 0:
+                    return float(data["data"][0]["nav"])
+        except Exception:
+            return None
+
+    # Fetch ETF price via yfinance
     try:
         data = yf.Ticker(ticker)
         try:
@@ -137,7 +149,7 @@ TICKERS = {
     "NIFTY 50": "NIFTYBEES.NS", 
     "GOLD": "GOLDBEES.NS", 
     "Liquid": "LIQUIDBEES.NS",
-    "Mirae ELSS": "0P0001B988.BO"  # Yahoo Finance ISIN proxy for Mirae Asset ELSS Direct Growth
+    "Mirae ELSS": "AMFI:135781"  # Official AMFI Scheme Code for Mirae Asset ELSS Direct Growth
 }
 INITIAL_LOAN = 4890000.0
 INTEREST_RATE_ANNUAL = 7.20
@@ -182,7 +194,7 @@ def load_data():
 
 df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed = load_data()
 
-# Update Portfolio with Live LTPs
+# Update Portfolio Items with Live LTPs
 for idx, row in df_portfolio.iterrows():
     cat = row["Category"]
     if cat in TICKERS:
@@ -341,85 +353,94 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 2: PORTFOLIO HOLDINGS (MOBILE-FRIENDLY CARDS WITH TOGGLE EDIT) ---
-sec2_col1, sec2_col2 = st.columns([4, 1])
+# --- PART 2: PORTFOLIO HOLDINGS (MOBILE CARDS & POP-UP EDIT FORM) ---
+sec2_col1, sec2_col2 = st.columns([3, 1])
 
 with sec2_col1:
     st.subheader("2. Live Portfolio Holdings")
 with sec2_col2:
-    if not st.session_state.edit_portfolio:
-        if st.button("✏️ Edit Holdings", use_container_width=True):
-            st.session_state.edit_portfolio = True
-            st.rerun()
-    else:
-        if st.button("❌ Cancel Edit", use_container_width=True):
-            st.session_state.edit_portfolio = False
-            st.rerun()
-
-# READONLY MODE (MOBILE VERTICAL CARDS - HIDES EMPTY HOLDINGS)
-if not st.session_state.edit_portfolio:
-    active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
-    
-    if active_holdings.empty:
-        st.info("No active investments found. Click 'Edit Holdings' to log your first purchase.")
-    else:
-        for _, row in active_holdings.iterrows():
-            cat = row["Category"]
-            units = row["Units_Accumulated"]
-            ltp = row["Current_LTP"]
-            inv = row["Invested_Value"]
-            curr = row["Current_Value"]
-            pnl = row["P&L (₹)"]
-            pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
+    with st.popover("✏️ Edit Holdings", use_container_width=True):
+        st.markdown("### 📊 Update Asset Holdings")
+        
+        selected_cat = st.selectbox(
+            "Select Asset:",
+            df_portfolio["Category"].tolist()
+        )
+        
+        selected_row = df_portfolio[df_portfolio["Category"] == selected_cat].iloc[0]
+        curr_units = float(selected_row["Units_Accumulated"])
+        curr_invested = float(selected_row["Invested_Value"])
+        
+        new_units = st.number_input(
+            "Units Accumulated", 
+            value=curr_units, 
+            min_value=0.0, 
+            step=1.0, 
+            format="%.4f"
+        )
+        new_invested = st.number_input(
+            "Total Amount Invested (₹)", 
+            value=curr_invested, 
+            min_value=0.0, 
+            step=1000.0, 
+            format="%.2f"
+        )
+        
+        if st.button("💾 Save Asset Updates", type="primary", use_container_width=True):
+            idx = df_portfolio[df_portfolio["Category"] == selected_cat].index[0]
+            df_portfolio.at[idx, "Units_Accumulated"] = new_units
+            df_portfolio.at[idx, "Invested_Value"] = new_invested
             
-            with st.container(border=True):
-                st.markdown(
-                    f"**{cat}** &nbsp;&nbsp; `<span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>`", 
-                    unsafe_allow_html=True
-                )
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Invested", format_inr(inv))
-                m2.metric("Current Value", format_inr(curr))
-                m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+            df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
+            
+            # Write corrected GOOGLEFINANCE formula for Sheets compatibility
+            if "Mirae ELSS" in df_to_save["Category"].values:
+                df_to_save.loc[df_to_save["Category"] == "Mirae ELSS", "Current_LTP"] = '=GOOGLEFINANCE("MUTF_IN:MIRA_ASSE_ELSS_41CP29")'
+            
+            conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
+            
+            df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
+            new_total_val = df_portfolio["Current_Value"].sum()
+            new_total_inv = df_portfolio["Invested_Value"].sum()
+            
+            snapshot_row = pd.DataFrame([{
+                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "Month_Year": datetime.now().strftime("%b %Y"),
+                "Total_Invested": new_total_inv,
+                "Total_Value": new_total_val
+            }])
+            
+            updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
+            conn.update(worksheet="Investment_Log", data=updated_inv_log)
+            
+            st.success(f"Updated {selected_cat} successfully!")
+            st.rerun()
 
-# EDITABLE MODE (TABULAR DATA EDITOR - SHOWS ALL HOLDINGS)
+# READONLY CARDS VIEW (HIDES ASSETS WHERE INVESTED AMOUNT IS 0)
+active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
+
+if active_holdings.empty:
+    st.info("No active investments logged yet. Click '✏️ Edit Holdings' to enter your asset holdings.")
 else:
-    st.info("💡 Edit your **Units Accumulated** or **Invested Value** below, then click **Save Portfolio Updates**.")
-    edited_portfolio = st.data_editor(
-        df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value", "Current_Value", "P&L (₹)"]],
-        column_config={
-            "Category": st.column_config.TextColumn("Asset Class", disabled=True),
-            "Units_Accumulated": st.column_config.NumberColumn("Total Units Held", format="%.4f", min_value=0.0),
-            "Current_LTP": st.column_config.NumberColumn("Live LTP (₹)", format="₹%.2f", disabled=True),
-            "Invested_Value": st.column_config.NumberColumn("Invested Capital (₹)", format="₹%d", min_value=0.0),
-            "Current_Value": st.column_config.NumberColumn("Current Value (₹)", format="₹%d", disabled=True),
-            "P&L (₹)": st.column_config.NumberColumn("Net P&L (₹)", format="₹%d", disabled=True),
-        },
-        hide_index=True,
-        use_container_width=True
-    )
-
-    if st.button("💾 Save Portfolio Updates & Record Snapshot", type="primary", use_container_width=True):
-        df_to_save = edited_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
-        conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
+    for _, row in active_holdings.iterrows():
+        cat = row["Category"]
+        units = row["Units_Accumulated"]
+        ltp = row["Current_LTP"]
+        inv = row["Invested_Value"]
+        curr = row["Current_Value"]
+        pnl = row["P&L (₹)"]
+        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
         
-        new_curr_val = (edited_portfolio["Units_Accumulated"] * edited_portfolio["Current_LTP"]).sum()
-        new_inv_val = edited_portfolio["Invested_Value"].sum()
-        
-        snapshot_row = pd.DataFrame([{
-            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "Month_Year": datetime.now().strftime("%b %Y"),
-            "Total_Invested": new_inv_val,
-            "Total_Value": new_curr_val
-        }])
-        
-        updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
-        conn.update(worksheet="Investment_Log", data=updated_inv_log)
-        
-        st.session_state.edit_portfolio = False
-        st.success("Portfolio updated and timeline snapshot recorded successfully!")
-        st.rerun()
+        with st.container(border=True):
+            st.markdown(
+                f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>", 
+                unsafe_allow_html=True
+            )
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Invested", format_inr(inv))
+            m2.metric("Current Value", format_inr(curr))
+            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
 st.divider()
 
