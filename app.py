@@ -194,7 +194,7 @@ def load_data():
 
 df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed = load_data()
 
-# Update Portfolio Items with Live LTPs
+# Update Portfolio Items with Live LTPs & Fallback Safety Net
 for idx, row in df_portfolio.iterrows():
     cat = row["Category"]
     if cat in TICKERS:
@@ -206,6 +206,11 @@ for idx, row in df_portfolio.iterrows():
 df_portfolio["Units_Accumulated"] = pd.to_numeric(df_portfolio["Units_Accumulated"], errors='coerce').fillna(0.0)
 df_portfolio["Current_LTP"] = pd.to_numeric(df_portfolio["Current_LTP"], errors='coerce').fillna(0.0)
 df_portfolio["Invested_Value"] = pd.to_numeric(df_portfolio["Invested_Value"], errors='coerce').fillna(0.0)
+
+# Fallback: If Current_LTP is 0 for an active asset, estimate LTP from Invested Value
+for idx, row in df_portfolio.iterrows():
+    if row["Current_LTP"] <= 0 and row["Units_Accumulated"] > 0 and row["Invested_Value"] > 0:
+        df_portfolio.at[idx, "Current_LTP"] = row["Invested_Value"] / row["Units_Accumulated"]
 
 df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
 df_portfolio["P&L (₹)"] = df_portfolio["Current_Value"] - df_portfolio["Invested_Value"]
@@ -279,7 +284,6 @@ st.divider()
 # --- PART 1: MONTHLY EMI LOGGING & CURRENT MONTH PAYMENT STATUS ---
 st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-# Due & Tenure Summary Metrics embedded directly inside Section 1
 m_col1, m_col2 = st.columns(2)
 with m_col1:
     st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
@@ -407,17 +411,17 @@ with sec2_col2:
             df_portfolio.at[idx, "Units_Accumulated"] = new_units
             df_portfolio.at[idx, "Invested_Value"] = new_invested
             
-            df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
-            
-            # Write corrected GOOGLEFINANCE formula for Sheets compatibility
-            if "Mirae ELSS" in df_to_save["Category"].values:
-                df_to_save.loc[df_to_save["Category"] == "Mirae ELSS", "Current_LTP"] = '=GOOGLEFINANCE("MUTF_IN:MIRA_ASSE_ELSS_41CP29")'
-            
-            conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
-            
+            # Recalculate live prices and portfolio metrics immediately before saving snapshot
+            for i, r in df_portfolio.iterrows():
+                if r["Current_LTP"] <= 0 and r["Units_Accumulated"] > 0 and r["Invested_Value"] > 0:
+                    df_portfolio.at[i, "Current_LTP"] = r["Invested_Value"] / r["Units_Accumulated"]
+
             df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
             new_total_val = df_portfolio["Current_Value"].sum()
             new_total_inv = df_portfolio["Invested_Value"].sum()
+
+            df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
+            conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
             
             snapshot_row = pd.DataFrame([{
                 "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
