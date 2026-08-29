@@ -212,6 +212,8 @@ df_portfolio["P&L (₹)"] = df_portfolio["Current_Value"] - df_portfolio["Invest
 
 total_portfolio_val = df_portfolio["Current_Value"].sum()
 total_portfolio_invested = df_portfolio["Invested_Value"].sum()
+overall_pnl = total_portfolio_val - total_portfolio_invested
+overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
 # --- DERIVED LOAN CALCULATIONS via AMORTIZATION ENGINE ---
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
@@ -245,23 +247,40 @@ corpus_4_pct = 0.04 * total_portfolio_val
 # --- DASHBOARD HEADER ---
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
-st.subheader("🎯 Net-Debt-Zero Visualizer")
-net_debt = current_principal - total_portfolio_val
-nd_col1, nd_col2 = st.columns([3, 1])
-with nd_col1:
-    st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
-with nd_col2:
-    if net_debt <= 0: st.success("🎉 Zero Debt Achieved!")
-    else: st.caption(f"Net Debt: **{format_inr(net_debt)}**")
+# --- NET-DEBT-ZERO & OVERALL SUMMARY CARD ---
+with st.container(border=True):
+    st.subheader("🎯 Net-Debt-Zero Visualizer")
+    net_debt = current_principal - total_portfolio_val
+    nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
+    
+    nd_col1, nd_col2 = st.columns([3, 1])
+    with nd_col1:
+        st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
+        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target")
+    with nd_col2:
+        if net_debt <= 0: 
+            st.success("🎉 Zero Debt Achieved!")
+        else: 
+            st.metric("Net Debt Pending", format_inr(net_debt))
+
+    st.divider()
+
+    # Overall Summary Metrics Row
+    s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+    pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
+    
+    s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
+    s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
+    s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
+    s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
 
 st.divider()
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Loan Balance", format_inr(current_principal))
+# Secondary Loan Status Row
+col1, col2 = st.columns(2)
 
-with col2:
+with col1:
     st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
-    
     if not is_handover:
         with st.popover("✏️ Edit Disbursement Stage"):
             st.markdown("### 🏗️ Update Loan Disbursement")
@@ -292,8 +311,7 @@ with col2:
                 st.success("Loan settings updated successfully!")
                 st.rerun()
 
-col3.metric("Current Tenure", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
-col4.metric("Portfolio Value", format_inr(total_portfolio_val), f"Invested: {format_inr(total_portfolio_invested)}")
+col2.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
 
 st.divider()
 
