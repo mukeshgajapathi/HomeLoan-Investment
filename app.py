@@ -276,10 +276,12 @@ with st.container(border=True):
 
 st.divider()
 
-# Secondary Loan Status Row
-col1, col2 = st.columns(2)
+# --- PART 1: MONTHLY EMI LOGGING & CURRENT MONTH PAYMENT STATUS ---
+st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-with col1:
+# Due & Tenure Summary Metrics embedded directly inside Section 1
+m_col1, m_col2 = st.columns(2)
+with m_col1:
     st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
     if not is_handover:
         with st.popover("✏️ Edit Disbursement Stage"):
@@ -311,12 +313,8 @@ with col1:
                 st.success("Loan settings updated successfully!")
                 st.rerun()
 
-col2.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
-
-st.divider()
-
-# --- PART 1: MONTHLY EMI LOGGING & CURRENT MONTH PAYMENT STATUS ---
-st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
+with m_col2:
+    st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
 
 current_month_str = datetime.now().strftime("%b %Y")
 
