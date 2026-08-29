@@ -110,8 +110,8 @@ def calc_rem_months(principal, emi, rate_monthly):
         return 0
 
 # --- AMORTIZATION ENGINE: DYNAMIC PRINCIPAL REDUCTION ---
-def calculate_loan_state(df_loan, initial_loan, rate_annual):
-    r_monthly = (rate_annual / 100) / 12
+# Uses historical row-level interest rates if available, otherwise falls back to current settings
+def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = initial_loan
     total_principal_cleared = 0.0
     emi_principal_cleared = 0.0
@@ -126,6 +126,16 @@ def calculate_loan_state(df_loan, initial_loan, rate_annual):
         for _, row in df_sorted.iterrows():
             p_type = str(row.get("Payment_Type", ""))
             actual_pay = float(row.get("Actual_Payment", 0.0))
+            
+            # Fetch historical rate if logged, otherwise use current global rate
+            row_rate = current_global_rate
+            if "Interest_Rate" in df_sorted.columns and not pd.isna(row.get("Interest_Rate")):
+                try:
+                    row_rate = float(row.get("Interest_Rate"))
+                except ValueError:
+                    pass
+                    
+            r_monthly = (row_rate / 100) / 12
             
             if p_type == "Pre-EMI":
                 pass
@@ -149,10 +159,9 @@ TICKERS = {
     "NIFTY 50": "NIFTYBEES.NS", 
     "GOLD": "GOLDBEES.NS", 
     "Liquid": "LIQUIDBEES.NS",
-    "Mirae ELSS": "AMFI:135781"  # Official AMFI Scheme Code for Mirae Asset ELSS Direct Growth
+    "Mirae ELSS": "AMFI:135781"
 }
 INITIAL_LOAN = 4890000.0
-INTEREST_RATE_ANNUAL = 7.20
 LOAN_TENURE_YEARS = 20
 
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -161,7 +170,7 @@ def load_data():
     try:
         df_loan = conn.read(worksheet="Loan_Tracker", ttl="0")
     except Exception:
-        df_loan = pd.DataFrame(columns=["Date", "Month_Year", "Expected_Payment", "Actual_Payment", "Payment_Type", "Confirmed"])
+        df_loan = pd.DataFrame(columns=["Date", "Month_Year", "Expected_Payment", "Actual_Payment", "Payment_Type", "Confirmed", "Interest_Rate"])
         
     try:
         df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl="0")
@@ -176,12 +185,21 @@ def load_data():
     try:
         df_settings = conn.read(worksheet="Loan_Settings", ttl="0")
         if not df_settings.empty:
-            disbursed_ratio = float(df_settings.iloc[0]["Disbursed_Ratio"])
-            is_handover_completed = str(df_settings.iloc[0]["Handover_Completed"]).strip().upper() == "TRUE"
+            disbursed_ratio = 0.90
+            if "Disbursed_Ratio" in df_settings.columns and not pd.isna(df_settings.iloc[0]["Disbursed_Ratio"]):
+                disbursed_ratio = float(df_settings.iloc[0]["Disbursed_Ratio"])
+                
+            is_handover_completed = False
+            if "Handover_Completed" in df_settings.columns:
+                is_handover_completed = str(df_settings.iloc[0]["Handover_Completed"]).strip().upper() == "TRUE"
+                
+            current_interest_rate = 7.20
+            if "Interest_Rate" in df_settings.columns and not pd.isna(df_settings.iloc[0]["Interest_Rate"]):
+                current_interest_rate = float(df_settings.iloc[0]["Interest_Rate"])
         else:
-            disbursed_ratio, is_handover_completed = 0.90, False
+            disbursed_ratio, is_handover_completed, current_interest_rate = 0.90, False, 7.20
     except Exception:
-        disbursed_ratio, is_handover_completed = 0.90, False
+        disbursed_ratio, is_handover_completed, current_interest_rate = 0.90, False, 7.20
 
     if df_portfolio.empty:
         df_portfolio = pd.DataFrame({
@@ -190,9 +208,9 @@ def load_data():
             "Current_LTP": [0.0, 0.0, 0.0, 0.0, 0.0],
             "Invested_Value": [0.0, 0.0, 0.0, 0.0, 0.0]
         })
-    return df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed
+    return df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate
 
-df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed = load_data()
+df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate = load_data()
 
 # Update Portfolio Items with Live LTPs & Fallback Safety Net
 for idx, row in df_portfolio.iterrows():
@@ -222,15 +240,15 @@ overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfo
 
 # --- DERIVED LOAN CALCULATIONS via AMORTIZATION ENGINE ---
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
-    df_loan, INITIAL_LOAN, INTEREST_RATE_ANNUAL
+    df_loan, INITIAL_LOAN, current_interest_rate
 )
 
-r_monthly = (INTEREST_RATE_ANNUAL / 100) / 12
+r_monthly = (current_interest_rate / 100) / 12
 n_months_base = LOAN_TENURE_YEARS * 12
 full_emi = INITIAL_LOAN * r_monthly * ((1 + r_monthly)**n_months_base) / (((1 + r_monthly)**n_months_base) - 1)
 
 disbursed_loan_amount = INITIAL_LOAN * disbursed_ratio
-monthly_pre_emi = (disbursed_loan_amount * (INTEREST_RATE_ANNUAL / 100)) / 12
+monthly_pre_emi = (disbursed_loan_amount * (current_interest_rate / 100)) / 12
 
 is_handover = is_handover_completed or disbursed_ratio >= 1.0
 
@@ -284,7 +302,7 @@ st.divider()
 # --- PART 1: MONTHLY EMI LOGGING & CURRENT MONTH PAYMENT STATUS ---
 st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-m_col1, m_col2 = st.columns(2)
+m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
     st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
     if not is_handover:
@@ -303,7 +321,7 @@ with m_col1:
             new_ratio = 0.90 if "90%" in selected_stage else (0.95 if "95%" in selected_stage else 1.0)
             confirm_handover = False
             if new_ratio == 1.0:
-                st.warning("⚠️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** (₹38,501) and this edit option will be **permanently locked**.")
+                st.warning(f"⚠️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** ({format_inr(full_emi)}) and this edit option will be **permanently locked**.")
                 confirm_handover = st.checkbox("I confirm handover is completed and agree to lock settings.")
             
             can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
@@ -311,13 +329,34 @@ with m_col1:
             if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary", use_container_width=True):
                 updated_settings = pd.DataFrame([{
                     "Disbursed_Ratio": new_ratio,
-                    "Handover_Completed": (new_ratio == 1.0)
+                    "Handover_Completed": (new_ratio == 1.0),
+                    "Interest_Rate": current_interest_rate
                 }])
                 conn.update(worksheet="Loan_Settings", data=updated_settings)
                 st.success("Loan settings updated successfully!")
                 st.rerun()
 
 with m_col2:
+    st.metric("Interest Rate", f"{current_interest_rate}%", "Floating Rate")
+    with st.popover("✏️ Update Interest Rate"):
+        st.markdown("### 🏦 Update Interest Rate")
+        new_rate = st.number_input(
+            "New Annual Interest Rate (%)", 
+            value=float(current_interest_rate), 
+            step=0.05, 
+            format="%.2f"
+        )
+        if st.button("💾 Save New Rate", type="primary", use_container_width=True):
+            updated_settings = pd.DataFrame([{
+                "Disbursed_Ratio": disbursed_ratio,
+                "Handover_Completed": is_handover_completed,
+                "Interest_Rate": new_rate
+            }])
+            conn.update(worksheet="Loan_Settings", data=updated_settings)
+            st.success(f"Interest rate dynamically updated to {new_rate}%!")
+            st.rerun()
+
+with m_col3:
     st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
 
 current_month_str = datetime.now().strftime("%b %Y")
@@ -351,7 +390,8 @@ with st.form("emi_form", clear_on_submit=True):
             "Expected_Payment": expected_loan, 
             "Actual_Payment": expected_loan, 
             "Payment_Type": payment_type, 
-            "Confirmed": True 
+            "Confirmed": True,
+            "Interest_Rate": current_interest_rate
         }])
         conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
         st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
@@ -421,128 +461,3 @@ with sec2_col2:
             # Round totals before appending to Investment_Log
             new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
             new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
-
-            df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
-            conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
-            
-            snapshot_row = pd.DataFrame([{
-                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "Month_Year": datetime.now().strftime("%b %Y"),
-                "Total_Invested": new_total_inv,
-                "Total_Value": new_total_val
-            }])
-            
-            updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
-            conn.update(worksheet="Investment_Log", data=updated_inv_log)
-            
-            st.success(f"Updated {selected_cat} successfully!")
-            st.rerun()
-
-# READONLY CARDS VIEW (HIDES ASSETS WHERE INVESTED AMOUNT IS 0)
-active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
-
-if active_holdings.empty:
-    st.info("No active investments logged yet. Click '✏️ Edit Holdings' to enter your asset holdings.")
-else:
-    for _, row in active_holdings.iterrows():
-        cat = row["Category"]
-        units = row["Units_Accumulated"]
-        ltp = row["Current_LTP"]
-        inv = row["Invested_Value"]
-        curr = row["Current_Value"]
-        pnl = row["P&L (₹)"]
-        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-        
-        with st.container(border=True):
-            st.markdown(
-                f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>", 
-                unsafe_allow_html=True
-            )
-            
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Invested", format_inr(inv))
-            m2.metric("Current Value", format_inr(curr))
-            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
-
-st.divider()
-
-# --- PART 3: PART PAYMENT (PREPAYMENT RULES & SIMULATOR) ---
-st.subheader("3. Part Payment (Tenure Reduction Simulator)")
-
-pp_input_col1, pp_input_col2 = st.columns(2)
-
-with pp_input_col1:
-    user_xirr = st.number_input("Enter Zerodha Console XIRR (%)", value=0.0, step=0.5, help="Check your accurate XIRR directly from Zerodha Console.")
-
-# Evaluate Prepayment Conditions
-is_xirr_valid = user_xirr > 10.0
-is_corpus_sufficient = corpus_4_pct >= min_prepayment_allowed
-
-if not is_xirr_valid:
-    st.warning(f"🔒 **Part Payment Greyed Out:** Zerodha Console XIRR must be > 10.0% to unlock prepayments (Current: {user_xirr:.1f}%).")
-    default_pp_val = float(min_prepayment_allowed)
-    enable_pp = False
-elif not is_corpus_sufficient:
-    st.info(f"⏳ **Corpus Growth Required:** Your 4% corpus allocation (**{format_inr(corpus_4_pct)}**) is less than the minimum required 2x EMI (**{format_inr(min_prepayment_allowed)}**). Please wait for your corpus to grow further.")
-    default_pp_val = float(min_prepayment_allowed)
-    enable_pp = False
-else:
-    st.success(f"✅ **Prepayment Unlocked:** XIRR > 10% and 4% portfolio cap meets minimum 2x EMI requirements.")
-    default_pp_val = float(corpus_4_pct)
-    enable_pp = True
-
-with pp_input_col2:
-    pp_amount = st.number_input(
-        "Part Payment Amount (₹)", 
-        value=default_pp_val, 
-        step=5000.0, 
-        disabled=not enable_pp,
-        help="Defaulted to 4% of actual corpus value when unlocked."
-    )
-
-# Dynamic Tenure Reduction Display
-new_rem_months = calc_rem_months(current_principal - (pp_amount if enable_pp else 0.0), full_emi, r_monthly)
-months_saved = max(0, current_rem_months - new_rem_months)
-
-st.metric("Tenure Reduced By", f"{int(months_saved)} Months", f"~ {months_saved/12:.1f} Years saved")
-
-if st.button("Execute Part Payment & Log to Sheet", disabled=not enable_pp, type="primary"):
-    new_row = pd.DataFrame([{
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-        "Month_Year": datetime.now().strftime("%b %Y"), 
-        "Expected_Payment": 0.0, 
-        "Actual_Payment": pp_amount, 
-        "Payment_Type": "Prepayment", 
-        "Confirmed": True
-    }])
-    conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-    st.success(f"Part payment of {format_inr(pp_amount)} applied! Tenure reduced by {int(months_saved)} months.")
-    st.rerun()
-
-st.divider()
-
-# --- PART 4: HISTORICAL PORTFOLIO GROWTH TIMELINE ---
-st.subheader("📈 Portfolio Valuation & Growth Timeline")
-
-if not df_inv_log.empty:
-    try:
-        df_chart = df_inv_log.copy()
-        
-        # Convert and round to 2 decimal places for clean tooltips
-        df_chart["Total_Invested"] = pd.to_numeric(df_chart["Total_Invested"], errors='coerce').round(2)
-        df_chart["Total_Value"] = pd.to_numeric(df_chart["Total_Value"], errors='coerce').round(2)
-        
-        # Pick the latest appended row per month
-        df_monthly = df_chart.groupby("Month_Year", sort=False).last().reset_index()
-        
-        df_monthly_chart = df_monthly.set_index("Month_Year")[["Total_Invested", "Total_Value"]]
-        
-        st.line_chart(
-            df_monthly_chart,
-            color=["#FF4B4B", "#00CC96"],
-            use_container_width=True
-        )
-    except Exception:
-        st.info("Log your portfolio updates to start building your historical growth chart!")
-else:
-    st.info("No historical snapshots found yet. Click 'Save Portfolio Updates & Record Snapshot' above to record your first snapshot.")
