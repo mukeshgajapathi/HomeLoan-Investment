@@ -4,7 +4,6 @@ import yfinance as yf
 import math
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
-import time
 
 st.set_page_config(
     page_title="Home Loan & Investment Tracker", 
@@ -14,37 +13,34 @@ st.set_page_config(
 
 # --- SECURITY / LOGIN WRAPPER ---
 def check_password():
-    """Returns `True` if the user had the correct password."""
-
+    """Returns `True` if the user enters the correct password."""
     def password_entered():
-# Use .get() with a default fallback to prevent KeyError crashes
-        expected_pass = st.secrets.get("APP_PASSWORD", "admin123") 
-        if st.session_state["password"] == expected_pass:
+        correct_password = str(st.secrets.get("APP_PASSWORD", st.secrets.get("theme", {}).get("APP_PASSWORD", "")))
+        entered_password = str(st.session_state["password"]).strip()
+        
+        if entered_password == correct_password:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # don't store password
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        # First run, show input for password.
         st.markdown("### 🔒 Secure Login Required")
         st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        # Password not correct, show input + error.
         st.markdown("### 🔒 Secure Login Required")
         st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
         st.error("😕 Password incorrect")
         return False
     else:
-        # Password correct.
         return True
 
 if not check_password():
-    st.stop()  # Do not continue running the script until authenticated
+    st.stop()
 
 # ==========================================
-# --- APP LOGIC (ONLY RUNS IF AUTHENTICATED) ---
+# --- APP LOGIC (RUNS IF AUTHENTICATED) ---
 # ==========================================
 
 # Initialize Session State for Edit Mode
@@ -293,7 +289,6 @@ st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
 current_month_str = datetime.now().strftime("%b %Y")
 
-# Check if current month is already paid
 if not df_loan.empty and "Month_Year" in df_loan.columns:
     emi_records = df_loan[df_loan["Payment_Type"].isin(["Pre-EMI", "Full EMI"])]
     is_current_month_paid = current_month_str in emi_records["Month_Year"].values
@@ -303,15 +298,12 @@ else:
 with st.form("emi_form", clear_on_submit=True):
     c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
     
-    # Auto-pick current month (Read-only)
     c1.text_input("Month-Year", value=current_month_str, disabled=True)
     
-    # Payment type & amount
     payment_type = "Full EMI" if is_handover else "Pre-EMI"
     expected_loan = full_emi if is_handover else monthly_pre_emi
     c2.text_input("Actual Payment Made", value=format_inr(expected_loan), disabled=True)
     
-    # Current Month Status Badge (Green PAID vs Red UNPAID)
     with c3:
         st.markdown("**Payment Status**")
         if is_current_month_paid:
@@ -351,7 +343,7 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 2: PORTFOLIO HOLDINGS (READONLY WITH TOGGLE EDIT) ---
+# --- PART 2: PORTFOLIO HOLDINGS (MOBILE-FRIENDLY CARDS WITH TOGGLE EDIT) ---
 sec2_col1, sec2_col2 = st.columns([4, 1])
 
 with sec2_col1:
@@ -366,23 +358,29 @@ with sec2_col2:
             st.session_state.edit_portfolio = False
             st.rerun()
 
-# READONLY MODE
+# READONLY MODE (MOBILE VERTICAL CARDS)
 if not st.session_state.edit_portfolio:
-    st.dataframe(
-        df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value", "Current_Value", "P&L (₹)"]],
-        column_config={
-            "Category": "Asset Class",
-            "Units_Accumulated": st.column_config.NumberColumn("Total Units Held", format="%.4f"),
-            "Current_LTP": st.column_config.NumberColumn("Live LTP (₹)", format="₹%.2f"),
-            "Invested_Value": st.column_config.NumberColumn("Invested Capital (₹)", format="₹%d"),
-            "Current_Value": st.column_config.NumberColumn("Current Value (₹)", format="₹%d"),
-            "P&L (₹)": st.column_config.NumberColumn("Net P&L (₹)", format="₹%d"),
-        },
-        hide_index=True,
-        use_container_width=True
-    )
+    for _, row in df_portfolio.iterrows():
+        cat = row["Category"]
+        units = row["Units_Accumulated"]
+        ltp = row["Current_LTP"]
+        inv = row["Invested_Value"]
+        curr = row["Current_Value"]
+        pnl = row["P&L (₹)"]
+        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
+        
+        with st.container(border=True):
+            st.markdown(
+                f"**{cat}** &nbsp;&nbsp; `<span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>`", 
+                unsafe_allow_html=True
+            )
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Invested", format_inr(inv))
+            m2.metric("Current Value", format_inr(curr))
+            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
-# EDITABLE MODE
+# EDITABLE MODE (TABULAR DATA EDITOR)
 else:
     st.info("💡 Edit your **Units Accumulated** or **Invested Value** below, then click **Save Portfolio Updates**.")
     edited_portfolio = st.data_editor(
