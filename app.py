@@ -136,7 +136,8 @@ TICKERS = {
     "Next 50": "NEXT50.NS", 
     "NIFTY 50": "NIFTYBEES.NS", 
     "GOLD": "GOLDBEES.NS", 
-    "Liquid": "LIQUIDBEES.NS"
+    "Liquid": "LIQUIDBEES.NS",
+    "Mirae ELSS": "0P0001B988.BO"  # Yahoo Finance ISIN proxy for Mirae Asset ELSS Direct Growth
 }
 INITIAL_LOAN = 4890000.0
 INTEREST_RATE_ANNUAL = 7.20
@@ -172,10 +173,10 @@ def load_data():
 
     if df_portfolio.empty:
         df_portfolio = pd.DataFrame({
-            "Category": ["Next 50", "NIFTY 50", "GOLD", "Liquid"],
-            "Units_Accumulated": [0.0, 0.0, 0.0, 0.0],
-            "Current_LTP": [0.0, 0.0, 0.0, 0.0],
-            "Invested_Value": [0.0, 0.0, 0.0, 0.0]
+            "Category": ["Next 50", "NIFTY 50", "GOLD", "Liquid", "Mirae ELSS"],
+            "Units_Accumulated": [0.0, 0.0, 0.0, 0.0, 0.0],
+            "Current_LTP": [0.0, 0.0, 0.0, 0.0, 0.0],
+            "Invested_Value": [0.0, 0.0, 0.0, 0.0, 0.0]
         })
     return df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed
 
@@ -296,7 +297,6 @@ else:
     is_current_month_paid = False
 
 with st.form("emi_form", clear_on_submit=True):
-    # Adjusted to 3 equal columns since the checkbox is removed
     c1, c2, c3 = st.columns(3)
     
     c1.text_input("Month-Year", value=current_month_str, disabled=True)
@@ -319,7 +319,7 @@ with st.form("emi_form", clear_on_submit=True):
             "Expected_Payment": expected_loan, 
             "Actual_Payment": expected_loan, 
             "Payment_Type": payment_type, 
-            "Confirmed": True  # Backend flag maintained as True
+            "Confirmed": True 
         }])
         conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
         st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
@@ -356,29 +356,34 @@ with sec2_col2:
             st.session_state.edit_portfolio = False
             st.rerun()
 
-# READONLY MODE (MOBILE VERTICAL CARDS)
+# READONLY MODE (MOBILE VERTICAL CARDS - HIDES EMPTY HOLDINGS)
 if not st.session_state.edit_portfolio:
-    for _, row in df_portfolio.iterrows():
-        cat = row["Category"]
-        units = row["Units_Accumulated"]
-        ltp = row["Current_LTP"]
-        inv = row["Invested_Value"]
-        curr = row["Current_Value"]
-        pnl = row["P&L (₹)"]
-        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-        
-        with st.container(border=True):
-            st.markdown(
-                f"**{cat}** &nbsp;&nbsp; `<span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>`", 
-                unsafe_allow_html=True
-            )
+    active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
+    
+    if active_holdings.empty:
+        st.info("No active investments found. Click 'Edit Holdings' to log your first purchase.")
+    else:
+        for _, row in active_holdings.iterrows():
+            cat = row["Category"]
+            units = row["Units_Accumulated"]
+            ltp = row["Current_LTP"]
+            inv = row["Invested_Value"]
+            curr = row["Current_Value"]
+            pnl = row["P&L (₹)"]
+            pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
             
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Invested", format_inr(inv))
-            m2.metric("Current Value", format_inr(curr))
-            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+            with st.container(border=True):
+                st.markdown(
+                    f"**{cat}** &nbsp;&nbsp; `<span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>`", 
+                    unsafe_allow_html=True
+                )
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Invested", format_inr(inv))
+                m2.metric("Current Value", format_inr(curr))
+                m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
-# EDITABLE MODE (TABULAR DATA EDITOR)
+# EDITABLE MODE (TABULAR DATA EDITOR - SHOWS ALL HOLDINGS)
 else:
     st.info("💡 Edit your **Units Accumulated** or **Invested Value** below, then click **Save Portfolio Updates**.")
     edited_portfolio = st.data_editor(
