@@ -4,12 +4,47 @@ import yfinance as yf
 import math
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
+import time
 
 st.set_page_config(
-    page_title="Home Loan + Investment Tracker", 
+    page_title="Home Loan & Investment Tracker", 
     page_icon="🏡", 
     layout="wide"
 )
+
+# --- SECURITY / LOGIN WRAPPER ---
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    def password_entered():
+        if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # don't store password
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.markdown("### 🔒 Secure Login Required")
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password not correct, show input + error.
+        st.markdown("### 🔒 Secure Login Required")
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        st.error("😕 Password incorrect")
+        return False
+    else:
+        # Password correct.
+        return True
+
+if not check_password():
+    st.stop()  # Do not continue running the script until authenticated
+
+# ==========================================
+# --- APP LOGIC (ONLY RUNS IF AUTHENTICATED) ---
+# ==========================================
+
 # Initialize Session State for Edit Mode
 if "edit_portfolio" not in st.session_state:
     st.session_state.edit_portfolio = False
@@ -197,7 +232,7 @@ min_prepayment_allowed = 2 * full_emi
 corpus_4_pct = 0.04 * total_portfolio_val
 
 # --- DASHBOARD HEADER ---
-st.title("Home Loan & Investment Tracker")
+st.title("🏡 Home Loan & 📈 Investment Tracker")
 
 st.subheader("🎯 Net-Debt-Zero Visualizer")
 net_debt = current_principal - total_portfolio_val
