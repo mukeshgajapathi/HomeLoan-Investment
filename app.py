@@ -162,7 +162,7 @@ TICKERS = {
     "Mirae ELSS": "AMFI:135781"
 }
 INITIAL_LOAN = 4890000.0
-LOAN_TENURE_YEARS = 20
+LOAN_TENURE_YEARS = 30
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
