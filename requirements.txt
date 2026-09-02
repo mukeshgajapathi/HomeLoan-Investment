@@ -3,3 +3,4 @@ pandas
 yfinance
 st-gsheets-connection
 gspread
+kiteconnect
