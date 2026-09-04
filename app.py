@@ -66,7 +66,6 @@ def format_inr(value):
 # --- LIVE LTP FETCHING (ETF VIA YFINANCE & MUTUAL FUND VIA AMFI API) ---
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker):
-    # Fetch Mutual Fund NAV via official AMFI API code
     if ticker.startswith("AMFI:"):
         scheme_code = ticker.split(":")[1]
         try:
@@ -79,7 +78,6 @@ def fetch_live_ltp(ticker):
         except Exception:
             return None
 
-    # Fetch ETF price via yfinance
     try:
         data = yf.Ticker(ticker)
         try:
@@ -110,7 +108,6 @@ def calc_rem_months(principal, emi, rate_monthly):
         return 0
 
 # --- AMORTIZATION ENGINE: DYNAMIC PRINCIPAL REDUCTION ---
-# Uses historical row-level interest rates if available, otherwise falls back to current settings
 def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = initial_loan
     total_principal_cleared = 0.0
@@ -127,7 +124,6 @@ def calculate_loan_state(df_loan, initial_loan, current_global_rate):
             p_type = str(row.get("Payment_Type", ""))
             actual_pay = float(row.get("Actual_Payment", 0.0))
             
-            # Fetch historical rate if logged, otherwise use current global rate
             row_rate = current_global_rate
             if "Interest_Rate" in df_sorted.columns and not pd.isna(row.get("Interest_Rate")):
                 try:
@@ -152,6 +148,39 @@ def calculate_loan_state(df_loan, initial_loan, current_global_rate):
                 
     p_balance = max(0.0, p_balance)
     return p_balance, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared
+
+# --- CURRENT YEAR PREPAYMENT TRACKER HELPER ---
+def get_current_year_prepayment_status(df_loan, full_emi):
+    base_2x = 2 * full_emi
+    if not df_loan.empty and "Date" in df_loan.columns:
+        df_temp = df_loan.copy()
+        df_temp["Date_DT"] = pd.to_datetime(df_temp["Date"], errors="coerce")
+        df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
+        
+        if not df_temp.empty:
+            start_date = df_temp.iloc[0]["Date_DT"]
+            now = datetime.now()
+            
+            # Calculate current loan year index based on elapsed months
+            elapsed_months = (now.year - start_date.year) * 12 + (now.month - start_date.month)
+            current_year_num = max(1, (elapsed_months // 12) + 1)
+            
+            # Calculate target 2x stepped prepayment for the current loan year
+            target_prepay = base_2x * (1.10 ** (current_year_num - 1))
+            
+            # Calculate start date of current 12-month loan year cycle
+            year_start_date = start_date + pd.DateOffset(months=(current_year_num - 1) * 12)
+            
+            # Sum prepayments logged within current 12-month loan year
+            prepays_this_year = df_temp[
+                (df_temp["Payment_Type"] == "Prepayment") & 
+                (df_temp["Date_DT"] >= year_start_date)
+            ]["Actual_Payment"].astype(float).sum()
+            
+            pending_prepay = max(0.0, target_prepay - prepays_this_year)
+            return current_year_num, target_prepay, prepays_this_year, pending_prepay
+
+    return 1, base_2x, 0.0, base_2x
 
 # --- PARAMETERS & CONNECTION ---
 TICKERS = {
@@ -212,7 +241,7 @@ def load_data():
 
 df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate = load_data()
 
-# Update Portfolio Items with Live LTPs & Fallback Safety Net
+# Update Portfolio Items with Live LTPs
 for idx, row in df_portfolio.iterrows():
     cat = row["Category"]
     if cat in TICKERS:
@@ -225,7 +254,6 @@ df_portfolio["Units_Accumulated"] = pd.to_numeric(df_portfolio["Units_Accumulate
 df_portfolio["Current_LTP"] = pd.to_numeric(df_portfolio["Current_LTP"], errors='coerce').fillna(0.0)
 df_portfolio["Invested_Value"] = pd.to_numeric(df_portfolio["Invested_Value"], errors='coerce').fillna(0.0)
 
-# Fallback: If Current_LTP is 0 for an active asset, estimate LTP from Invested Value
 for idx, row in df_portfolio.iterrows():
     if row["Current_LTP"] <= 0 and row["Units_Accumulated"] > 0 and row["Invested_Value"] > 0:
         df_portfolio.at[idx, "Current_LTP"] = row["Invested_Value"] / row["Units_Accumulated"]
@@ -238,7 +266,7 @@ total_portfolio_invested = df_portfolio["Invested_Value"].sum()
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
-# --- DERIVED LOAN CALCULATIONS via AMORTIZATION ENGINE ---
+# --- DERIVED LOAN CALCULATIONS ---
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
     df_loan, INITIAL_LOAN, current_interest_rate
 )
@@ -288,7 +316,6 @@ with st.container(border=True):
 
     st.divider()
 
-    # Overall Summary Metrics Row
     s_col1, s_col2, s_col3, s_col4 = st.columns(4)
     pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
     
@@ -413,7 +440,7 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 2: PORTFOLIO HOLDINGS (MOBILE CARDS & POP-UP EDIT FORM) ---
+# --- PART 2: PORTFOLIO HOLDINGS ---
 sec2_col1, sec2_col2 = st.columns([3, 1])
 
 with sec2_col1:
@@ -440,150 +467,4 @@ with sec2_col2:
         )
         new_invested = st.number_input(
             "Total Amount Invested (₹)", 
-            value=curr_invested, 
-            min_value=0.0, 
-            step=1000.0, 
-            format="%.2f"
-        )
-        
-        if st.button("💾 Save Asset Updates", type="primary", use_container_width=True):
-            idx = df_portfolio[df_portfolio["Category"] == selected_cat].index[0]
-            df_portfolio.at[idx, "Units_Accumulated"] = new_units
-            df_portfolio.at[idx, "Invested_Value"] = new_invested
-            
-            # Recalculate live prices and portfolio metrics immediately before saving snapshot
-            for i, r in df_portfolio.iterrows():
-                if r["Current_LTP"] <= 0 and r["Units_Accumulated"] > 0 and r["Invested_Value"] > 0:
-                    df_portfolio.at[i, "Current_LTP"] = r["Invested_Value"] / r["Units_Accumulated"]
-
-            df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
-            
-            # Round totals before appending to Investment_Log
-            new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
-            new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
-
-            df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
-            conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
-            
-            snapshot_row = pd.DataFrame([{
-                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "Month_Year": datetime.now().strftime("%b %Y"),
-                "Total_Invested": new_total_inv,
-                "Total_Value": new_total_val
-            }])
-            
-            updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
-            conn.update(worksheet="Investment_Log", data=updated_inv_log)
-            
-            st.success(f"Updated {selected_cat} successfully!")
-            st.rerun()
-
-# READONLY CARDS VIEW (HIDES ASSETS WHERE INVESTED AMOUNT IS 0)
-active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
-
-if active_holdings.empty:
-    st.info("No active investments logged yet. Click '✏️ Edit Holdings' to enter your asset holdings.")
-else:
-    for _, row in active_holdings.iterrows():
-        cat = row["Category"]
-        units = row["Units_Accumulated"]
-        ltp = row["Current_LTP"]
-        inv = row["Invested_Value"]
-        curr = row["Current_Value"]
-        pnl = row["P&L (₹)"]
-        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-        
-        with st.container(border=True):
-            st.markdown(
-                f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>", 
-                unsafe_allow_html=True
-            )
-            
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Invested", format_inr(inv))
-            m2.metric("Current Value", format_inr(curr))
-            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
-
-st.divider()
-
-# --- PART 3: PART PAYMENT (PREPAYMENT RULES & SIMULATOR) ---
-st.subheader("3. Part Payment (Tenure Reduction Simulator)")
-
-pp_input_col1, pp_input_col2 = st.columns(2)
-
-with pp_input_col1:
-    user_xirr = st.number_input("Enter Zerodha Console XIRR (%)", value=0.0, step=0.5, help="Check your accurate XIRR directly from Zerodha Console.")
-
-# Evaluate Prepayment Conditions
-is_xirr_valid = user_xirr > 10.0
-is_corpus_sufficient = corpus_4_pct >= min_prepayment_allowed
-
-if not is_xirr_valid:
-    st.warning(f"🔒 **Part Payment Greyed Out:** Zerodha Console XIRR must be > 10.0% to unlock prepayments (Current: {user_xirr:.1f}%).")
-    default_pp_val = float(min_prepayment_allowed)
-    enable_pp = False
-elif not is_corpus_sufficient:
-    st.info(f"⏳ **Corpus Growth Required:** Your 4% corpus allocation (**{format_inr(corpus_4_pct)}**) is less than the minimum required 2x EMI (**{format_inr(min_prepayment_allowed)}**). Please wait for your corpus to grow further.")
-    default_pp_val = float(min_prepayment_allowed)
-    enable_pp = False
-else:
-    st.success(f"✅ **Prepayment Unlocked:** XIRR > 10% and 4% portfolio cap meets minimum 2x EMI requirements.")
-    default_pp_val = float(corpus_4_pct)
-    enable_pp = True
-
-with pp_input_col2:
-    pp_amount = st.number_input(
-        "Part Payment Amount (₹)", 
-        value=default_pp_val, 
-        step=5000.0, 
-        disabled=not enable_pp,
-        help="Defaulted to 4% of actual corpus value when unlocked."
-    )
-
-# Dynamic Tenure Reduction Display
-new_rem_months = calc_rem_months(current_principal - (pp_amount if enable_pp else 0.0), full_emi, r_monthly)
-months_saved = max(0, current_rem_months - new_rem_months)
-
-st.metric("Tenure Reduced By", f"{int(months_saved)} Months", f"~ {months_saved/12:.1f} Years saved")
-
-if st.button("Execute Part Payment & Log to Sheet", disabled=not enable_pp, type="primary"):
-    new_row = pd.DataFrame([{
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-        "Month_Year": datetime.now().strftime("%b %Y"), 
-        "Expected_Payment": 0.0, 
-        "Actual_Payment": pp_amount, 
-        "Payment_Type": "Prepayment", 
-        "Confirmed": True,
-        "Interest_Rate": current_interest_rate
-    }])
-    conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-    st.success(f"Part payment of {format_inr(pp_amount)} applied! Tenure reduced by {int(months_saved)} months.")
-    st.rerun()
-
-st.divider()
-
-# --- PART 4: HISTORICAL PORTFOLIO GROWTH TIMELINE ---
-st.subheader("📈 Portfolio Valuation & Growth Timeline")
-
-if not df_inv_log.empty:
-    try:
-        df_chart = df_inv_log.copy()
-        
-        # Convert and round to 2 decimal places for clean tooltips
-        df_chart["Total_Invested"] = pd.to_numeric(df_chart["Total_Invested"], errors='coerce').round(2)
-        df_chart["Total_Value"] = pd.to_numeric(df_chart["Total_Value"], errors='coerce').round(2)
-        
-        # Pick the latest appended row per month
-        df_monthly = df_chart.groupby("Month_Year", sort=False).last().reset_index()
-        
-        df_monthly_chart = df_monthly.set_index("Month_Year")[["Total_Invested", "Total_Value"]]
-        
-        st.line_chart(
-            df_monthly_chart,
-            color=["#FF4B4B", "#00CC96"],
-            use_container_width=True
-        )
-    except Exception:
-        st.info("Log your portfolio updates to start building your historical growth chart!")
-else:
-    st.info("No historical snapshots found yet. Click 'Save Portfolio Updates & Record Snapshot' above to record your first snapshot.")
+            value=curr_investe
