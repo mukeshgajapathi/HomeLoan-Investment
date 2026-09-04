@@ -467,4 +467,4 @@ with sec2_col2:
         )
         new_invested = st.number_input(
             "Total Amount Invested (₹)", 
-            value=curr_investe
+            value=curr_invested
