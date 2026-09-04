@@ -66,6 +66,7 @@ def format_inr(value):
 # --- LIVE LTP FETCHING (ETF VIA YFINANCE & MUTUAL FUND VIA AMFI API) ---
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker):
+    # Fetch Mutual Fund NAV via official AMFI API code
     if ticker.startswith("AMFI:"):
         scheme_code = ticker.split(":")[1]
         try:
@@ -78,6 +79,7 @@ def fetch_live_ltp(ticker):
         except Exception:
             return None
 
+    # Fetch ETF price via yfinance
     try:
         data = yf.Ticker(ticker)
         try:
@@ -108,6 +110,7 @@ def calc_rem_months(principal, emi, rate_monthly):
         return 0
 
 # --- AMORTIZATION ENGINE: DYNAMIC PRINCIPAL REDUCTION ---
+# Uses historical row-level interest rates if available, otherwise falls back to current settings
 def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = initial_loan
     total_principal_cleared = 0.0
@@ -124,6 +127,7 @@ def calculate_loan_state(df_loan, initial_loan, current_global_rate):
             p_type = str(row.get("Payment_Type", ""))
             actual_pay = float(row.get("Actual_Payment", 0.0))
             
+            # Fetch historical rate if logged, otherwise use current global rate
             row_rate = current_global_rate
             if "Interest_Rate" in df_sorted.columns and not pd.isna(row.get("Interest_Rate")):
                 try:
@@ -157,30 +161,40 @@ def get_current_year_prepayment_status(df_loan, full_emi):
         df_temp["Date_DT"] = pd.to_datetime(df_temp["Date"], errors="coerce")
         df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
         
-        if not df_temp.empty:
-            start_date = df_temp.iloc[0]["Date_DT"]
-            now = datetime.now()
+        # Anchor start date to first Full EMI or Prepayment entry (June 2027 onward)
+        df_full = df_temp[df_temp["Payment_Type"].isin(["Full EMI", "Prepayment"])]
+        
+        if not df_full.empty:
+            start_date = df_full.iloc[0]["Date_DT"]
+        else:
+            start_date = pd.to_datetime("2027-06-01")
             
-            # Calculate current loan year index based on elapsed months
-            elapsed_months = (now.year - start_date.year) * 12 + (now.month - start_date.month)
-            current_year_num = max(1, (elapsed_months // 12) + 1)
-            
-            # Calculate target 2x stepped prepayment for the current loan year
-            target_prepay = base_2x * (1.10 ** (current_year_num - 1))
-            
-            # Calculate start date of current 12-month loan year cycle
-            year_start_date = start_date + pd.DateOffset(months=(current_year_num - 1) * 12)
-            
-            # Sum prepayments logged within current 12-month loan year
-            prepays_this_year = df_temp[
-                (df_temp["Payment_Type"] == "Prepayment") & 
-                (df_temp["Date_DT"] >= year_start_date)
-            ]["Actual_Payment"].astype(float).sum()
-            
-            pending_prepay = max(0.0, target_prepay - prepays_this_year)
-            return current_year_num, target_prepay, prepays_this_year, pending_prepay
+        now = datetime.now()
+        
+        # If currently in Pre-EMI phase (before June 2027)
+        if now < start_date:
+            return 0, base_2x, 0.0, base_2x
+        
+        # Calculate active loan year index starting from June 2027
+        elapsed_months = (now.year - start_date.year) * 12 + (now.month - start_date.month)
+        current_year_num = max(1, (elapsed_months // 12) + 1)
+        
+        # Target 2x stepped prepayment for current active loan year
+        target_prepay = base_2x * (1.10 ** (current_year_num - 1))
+        
+        # Start date of current 12-month loan year cycle
+        year_start_date = start_date + pd.DateOffset(months=(current_year_num - 1) * 12)
+        
+        # Sum prepayments logged within current 12-month loan year
+        prepays_this_year = df_temp[
+            (df_temp["Payment_Type"] == "Prepayment") & 
+            (df_temp["Date_DT"] >= year_start_date)
+        ]["Actual_Payment"].astype(float).sum()
+        
+        pending_prepay = max(0.0, target_prepay - prepays_this_year)
+        return current_year_num, target_prepay, prepays_this_year, pending_prepay
 
-    return 1, base_2x, 0.0, base_2x
+    return 0, base_2x, 0.0, base_2x
 
 # --- PARAMETERS & CONNECTION ---
 TICKERS = {
@@ -241,7 +255,7 @@ def load_data():
 
 df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate = load_data()
 
-# Update Portfolio Items with Live LTPs
+# Update Portfolio Items with Live LTPs & Fallback Safety Net
 for idx, row in df_portfolio.iterrows():
     cat = row["Category"]
     if cat in TICKERS:
@@ -254,6 +268,7 @@ df_portfolio["Units_Accumulated"] = pd.to_numeric(df_portfolio["Units_Accumulate
 df_portfolio["Current_LTP"] = pd.to_numeric(df_portfolio["Current_LTP"], errors='coerce').fillna(0.0)
 df_portfolio["Invested_Value"] = pd.to_numeric(df_portfolio["Invested_Value"], errors='coerce').fillna(0.0)
 
+# Fallback: If Current_LTP is 0 for an active asset, estimate LTP from Invested Value
 for idx, row in df_portfolio.iterrows():
     if row["Current_LTP"] <= 0 and row["Units_Accumulated"] > 0 and row["Invested_Value"] > 0:
         df_portfolio.at[idx, "Current_LTP"] = row["Invested_Value"] / row["Units_Accumulated"]
@@ -266,7 +281,7 @@ total_portfolio_invested = df_portfolio["Invested_Value"].sum()
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
-# --- DERIVED LOAN CALCULATIONS ---
+# --- DERIVED LOAN CALCULATIONS via AMORTIZATION ENGINE ---
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
     df_loan, INITIAL_LOAN, current_interest_rate
 )
@@ -316,6 +331,7 @@ with st.container(border=True):
 
     st.divider()
 
+    # Overall Summary Metrics Row
     s_col1, s_col2, s_col3, s_col4 = st.columns(4)
     pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
     
@@ -440,7 +456,7 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 2: PORTFOLIO HOLDINGS ---
+# --- PART 2: PORTFOLIO HOLDINGS (MOBILE CARDS & POP-UP EDIT FORM) ---
 sec2_col1, sec2_col2 = st.columns([3, 1])
 
 with sec2_col1:
@@ -478,12 +494,14 @@ with sec2_col2:
             df_portfolio.at[idx, "Units_Accumulated"] = new_units
             df_portfolio.at[idx, "Invested_Value"] = new_invested
             
+            # Recalculate live prices and portfolio metrics immediately before saving snapshot
             for i, r in df_portfolio.iterrows():
                 if r["Current_LTP"] <= 0 and r["Units_Accumulated"] > 0 and r["Invested_Value"] > 0:
                     df_portfolio.at[i, "Current_LTP"] = r["Invested_Value"] / r["Units_Accumulated"]
 
             df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
             
+            # Round totals before appending to Investment_Log
             new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
             new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
 
@@ -518,24 +536,30 @@ st.divider()
 # --- PART 3: PREPAYMENT DECISION ENGINE & STRATEGY SIMULATOR ---
 st.subheader("3. Loan Prepayment Engine & Strategy Simulator")
 
-# CURRENT YEAR'S 10% STEP-UP PREPAYMENT TRACKER CARD
+# CURRENT YEAR 10% STEP-UP 2X PREPAYMENT TRACKER CARD
 curr_year_num, curr_target_prepay, curr_paid_prepay, curr_pending_prepay = get_current_year_prepayment_status(df_loan, full_emi)
 
 with st.container(border=True):
-    st.markdown(f"### 📅 Current Year Prepayment Tracker (**Year {curr_year_num}**)")
+    if curr_year_num == 0:
+        st.markdown("### 📅 Current Year Prepayment Tracker (**Pre-EMI Phase - Prepayments Start June 2027**)")
+    else:
+        st.markdown(f"### 📅 Current Year Prepayment Tracker (**Year {curr_year_num}**)")
     
     p_col1, p_col2, p_col3 = st.columns(3)
-    p_col1.metric("10% Stepped 2x Target", format_inr(curr_target_prepay), f"Year {curr_year_num} Obligation")
+    p_col1.metric("10% Stepped 2x Target", format_inr(curr_target_prepay), f"Year {max(1, curr_year_num)} Target")
     p_col2.metric("Prepayments Paid So Far", format_inr(curr_paid_prepay))
     
     with p_col3:
-        if curr_pending_prepay <= 0:
+        if curr_year_num == 0:
+            st.markdown("**Pending Target**")
+            st.markdown("<span style='color:#31333F; font-weight:bold; font-size:18px;'>⏳ PRE-EMI PHASE</span>", unsafe_allow_html=True)
+        elif curr_pending_prepay <= 0:
             st.markdown("**Pending Target**")
             st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 YEARLY TARGET MET</span>", unsafe_allow_html=True)
         else:
             st.metric("Pending Amount for Current Year", format_inr(curr_pending_prepay))
 
-# LIVE 4% CORPUS RULE STATUS
+# LIVE 4% PORTFOLIO CORPUS RULE STATUS
 with st.container(border=True):
     st.markdown("### 🚦 Live 4% Portfolio Corpus Rule Status")
     
@@ -580,8 +604,8 @@ st.markdown("### 🔮 Prepayment Strategy Simulator")
 strategy_choice = st.selectbox(
     "Select Strategy Model to Simulate:",
     options=[
-        "10% Annual Step-Up 2x Prepayment",
-        "4% Portfolio Corpus Rule (XIRR > 10%)"
+        "4% Portfolio Corpus Rule (XIRR > 10%)",
+        "10% Annual Step-Up 2x Prepayment"
     ]
 )
 
@@ -616,14 +640,14 @@ def simulate_prepayment_strategy(strategy, initial_balance, current_rate, portfo
         portfolio = (portfolio + monthly_sip) * (1 + r_eq)
         prepay_amt = 0.0
         
-        if strategy == "10% Annual Step-Up 2x Prepayment":
-            if month % 12 == 0:
-                prepay_amt = base_2x * (1.10 ** (year - 1))
-                
-        elif strategy == "4% Portfolio Corpus Rule (XIRR > 10%)":
+        if strategy == "4% Portfolio Corpus Rule (XIRR > 10%)":
             corpus_4 = 0.04 * portfolio
             if corpus_4 >= base_2x and cagr >= 0.10:
                 prepay_amt = corpus_4
+                
+        elif strategy == "10% Annual Step-Up 2x Prepayment":
+            if month % 12 == 0:
+                prepay_amt = base_2x * (1.10 ** (year - 1))
         
         if prepay_amt > 0 and principal > 0:
             actual_p = min(principal, prepay_amt)
