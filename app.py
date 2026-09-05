@@ -576,6 +576,7 @@ with st.container(border=True):
 # 2. Live 4% Portfolio Corpus Rule Status
 with st.container(border=True):
     st.markdown("### 🚦 Live 4% Portfolio Corpus Rule Status")
+    st.caption("ℹ️ **Annual Limit:** Tapping the portfolio corpus under this rule is strictly limited to **1 time per loan year**.")
     
     rule_col1, rule_col2, rule_col3 = st.columns(3)
     rule_col1.metric("4% Corpus Allocation", format_inr(corpus_4_pct))
@@ -585,7 +586,7 @@ with st.container(border=True):
     with rule_col3:
         st.markdown("**Corpus Requirement**")
         if has_4pct_executed:
-            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR</span>", unsafe_allow_html=True)
+            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR (1/1 Used)</span>", unsafe_allow_html=True)
         elif is_corpus_sufficient:
             st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 MET (≥ 2x EMI)</span>", unsafe_allow_html=True)
         else:
@@ -606,6 +607,7 @@ pp_input_col1, pp_input_col2 = st.columns(2)
 
 if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
     with pp_input_col1:
+        st.caption("⚠️ *Rule Restriction: Tapping the corpus under this strategy is limited to strictly 1 time per loan year.*")
         user_xirr = st.number_input(
             "Enter Zerodha Console XIRR (%)", 
             value=0.0, 
@@ -616,7 +618,7 @@ if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
     is_xirr_valid = user_xirr > 10.0
     
     if has_4pct_executed:
-        st.warning(f"🔒 **Part Payment Locked (Once-per-Year Rule):** You have already executed your 4% Corpus Rule prepayment for Loan Year {curr_year_num}. Only 1 withdrawal is permitted per loan year.")
+        st.warning(f"🔒 **Part Payment Locked (Annual Limit Reached):** You have already executed your 1-time 4% Corpus Rule prepayment for Loan Year {curr_year_num}. Further withdrawals under this rule are locked until next loan year.")
         default_pp_val = float(min_prepayment_allowed)
         enable_pp = False
     elif not is_xirr_valid:
