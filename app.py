@@ -141,7 +141,7 @@ def calculate_loan_state(df_loan, initial_loan, current_global_rate):
                 p_balance -= principal_portion
                 total_principal_cleared += principal_portion
                 emi_principal_cleared += principal_portion
-            elif p_type == "Prepayment":
+            elif "Prepayment" in p_type:
                 p_balance -= actual_pay
                 total_principal_cleared += actual_pay
                 prepay_principal_cleared += actual_pay
@@ -158,7 +158,7 @@ def get_current_year_prepayment_status(df_loan, full_emi):
         df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
         
         # Anchor start date to first Full EMI or Prepayment entry (June 2027 onward)
-        df_full = df_temp[df_temp["Payment_Type"].isin(["Full EMI", "Prepayment"])]
+        df_full = df_temp[df_temp["Payment_Type"].str.contains("Full EMI|Prepayment", na=False)]
         
         if not df_full.empty:
             start_date = df_full.iloc[0]["Date_DT"]
@@ -169,7 +169,7 @@ def get_current_year_prepayment_status(df_loan, full_emi):
         
         # If currently in Pre-EMI phase (before June 2027)
         if now < start_date:
-            return 0, base_2x, 0.0, base_2x
+            return 0, base_2x, 0.0, base_2x, False
         
         # Calculate active loan year index starting from June 2027
         elapsed_months = (now.year - start_date.year) * 12 + (now.month - start_date.month)
@@ -181,16 +181,21 @@ def get_current_year_prepayment_status(df_loan, full_emi):
         # Start date of current 12-month loan year cycle
         year_start_date = start_date + pd.DateOffset(months=(current_year_num - 1) * 12)
         
-        # Sum prepayments logged within current 12-month loan year
-        prepays_this_year = df_temp[
-            (df_temp["Payment_Type"] == "Prepayment") & 
+        # Filter prepayments logged within current 12-month loan year
+        prepays_this_year_df = df_temp[
+            (df_temp["Payment_Type"].str.contains("Prepayment", na=False)) & 
             (df_temp["Date_DT"] >= year_start_date)
-        ]["Actual_Payment"].astype(float).sum()
+        ]
+        
+        prepays_this_year = prepays_this_year_df["Actual_Payment"].astype(float).sum()
+        
+        # Check if 4% corpus prepayment was already executed in current loan year
+        has_4pct_prepay_this_year = prepays_this_year_df["Payment_Type"].str.contains("4% Corpus", na=False).any()
         
         pending_prepay = max(0.0, target_prepay - prepays_this_year)
-        return current_year_num, target_prepay, prepays_this_year, pending_prepay
+        return current_year_num, target_prepay, prepays_this_year, pending_prepay, has_4pct_prepay_this_year
 
-    return 0, base_2x, 0.0, base_2x
+    return 0, base_2x, 0.0, base_2x, False
 
 # --- PARAMETERS & CONNECTION ---
 TICKERS = {
@@ -546,7 +551,7 @@ st.divider()
 st.subheader("3. Part Payment & Prepayment Tracker")
 
 # 1. Mandatory 10% Step-Up 2x EMI Prepayment Tracker
-curr_year_num, curr_target_prepay, curr_paid_prepay, curr_pending_prepay = get_current_year_prepayment_status(df_loan, full_emi)
+curr_year_num, curr_target_prepay, curr_paid_prepay, curr_pending_prepay, has_4pct_executed = get_current_year_prepayment_status(df_loan, full_emi)
 
 with st.container(border=True):
     if curr_year_num == 0:
@@ -579,7 +584,9 @@ with st.container(border=True):
     is_corpus_sufficient = corpus_4_pct >= min_prepayment_allowed
     with rule_col3:
         st.markdown("**Corpus Requirement**")
-        if is_corpus_sufficient:
+        if has_4pct_executed:
+            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR</span>", unsafe_allow_html=True)
+        elif is_corpus_sufficient:
             st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 MET (≥ 2x EMI)</span>", unsafe_allow_html=True)
         else:
             st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED (< 2x EMI)</span>", unsafe_allow_html=True)
@@ -608,7 +615,11 @@ if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
 
     is_xirr_valid = user_xirr > 10.0
     
-    if not is_xirr_valid:
+    if has_4pct_executed:
+        st.warning(f"🔒 **Part Payment Locked (Once-per-Year Rule):** You have already executed your 4% Corpus Rule prepayment for Loan Year {curr_year_num}. Only 1 withdrawal is permitted per loan year.")
+        default_pp_val = float(min_prepayment_allowed)
+        enable_pp = False
+    elif not is_xirr_valid:
         st.warning(f"🔒 **Part Payment Locked:** Zerodha Console XIRR must be > 10.0% to unlock corpus prepayments (Current: {user_xirr:.1f}%).")
         default_pp_val = float(min_prepayment_allowed)
         enable_pp = False
@@ -629,6 +640,7 @@ if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
             disabled=not enable_pp,
             help="Defaulted to 4% of actual corpus value when unlocked."
         )
+    logged_payment_type = "Prepayment (4% Corpus)"
 
 else:  # Mandatory 10% Stepped 2x Annual Prepayment
     with pp_input_col1:
@@ -654,6 +666,7 @@ else:  # Mandatory 10% Stepped 2x Annual Prepayment
             disabled=not enable_pp,
             help="Defaulted to your remaining pending prepayment target for the active loan year."
         )
+    logged_payment_type = "Prepayment (10% Stepped)"
 
 # Dynamic Tenure Reduction Display
 new_rem_months = calc_rem_months(current_principal - (pp_amount if enable_pp else 0.0), full_emi, r_monthly)
@@ -667,7 +680,7 @@ if st.button("Execute Part Payment & Log to Sheet", disabled=not enable_pp, type
         "Month_Year": datetime.now().strftime("%b %Y"), 
         "Expected_Payment": 0.0, 
         "Actual_Payment": pp_amount, 
-        "Payment_Type": "Prepayment", 
+        "Payment_Type": logged_payment_type, 
         "Confirmed": True,
         "Interest_Rate": current_interest_rate
     }])
