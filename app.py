@@ -13,12 +13,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- SECURITY / LOGIN WRAPPER ---
 def check_password():
     def password_entered():
         correct_password = str(st.secrets.get("APP_PASSWORD", st.secrets.get("theme", {}).get("APP_PASSWORD", "")))
         entered_password = str(st.session_state["password"]).strip()
-        
         if entered_password == correct_password:
             st.session_state["password_correct"] = True
             del st.session_state["password"]
@@ -40,10 +38,6 @@ def check_password():
 if not check_password():
     st.stop()
 
-# ==========================================
-# --- APP LOGIC (RUNS IF AUTHENTICATED) ---
-# ==========================================
-
 def format_inr(value):
     try:
         is_negative = value < 0
@@ -61,13 +55,14 @@ def format_inr(value):
     except ValueError:
         return "₹0"
 
-SYMBOL_MAP = {
-    "NEXT50": "Next 50",
+# Strict ETF Symbol Mapping
+EXACT_ETF_MAP = {
     "NIFTYBEES": "NIFTY 50",
     "HDFCNIFETF": "NIFTY 50",
+    "JUNIORBEES": "Next 50",
+    "NEXT50": "Next 50",
     "GOLDBEES": "GOLD",
-    "LIQUIDBEES": "Liquid",
-    "MIRAE": "Mirae ELSS"
+    "LIQUIDBEES": "Liquid"
 }
 
 EXCLUDE_KEYWORDS = ["FUT", "CE", "PE", "MCX", "GOLDPETAL", "GOLDGUINEA", "CRUDEOIL"]
@@ -124,9 +119,7 @@ def calc_rem_months(principal, emi, rate_monthly):
 
 def solve_xirr(cash_flows, dates, guess=0.12):
     try:
-        if len(cash_flows) < 2 or sum(cash_flows) == 0:
-            return 0.12
-
+        if len(cash_flows) < 2 or sum(cash_flows) == 0: return 0.12
         d0 = dates[0]
         years = [(d - d0).days / 365.25 for d in dates]
 
@@ -147,17 +140,16 @@ def solve_xirr(cash_flows, dates, guess=0.12):
             if abs(new_r - r) < 1e-6:
                 return max(0.05, min(new_r, 0.35))
             r = new_r
-
         return max(0.05, min(r, 0.35))
     except Exception:
         return 0.12
 
 def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
     if df_raw_trades.empty:
-        return None, df_portfolio_base
+        return None, df_portfolio_base, pd.DataFrame()
 
-    portfolio_cats = df_portfolio_base["Category"].tolist()
-    category_holdings = {cat.strip().upper(): {"cat_orig": cat, "qty": 0.0, "invested": 0.0} for cat in portfolio_cats}
+    etf_categories = {cat: {"qty": 0.0, "invested": 0.0} for cat in df_portfolio_base["Category"].tolist()}
+    mf_holdings = {}
     cash_flows = []
     dates = []
 
@@ -183,122 +175,72 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
             cash_flows.append(trade_val)
             dates.append(row["Date_DT"])
 
-        matched_cat_upper = None
-        for s_key, c_val in SYMBOL_MAP.items():
-            if s_key.upper() in sym:
-                matched_cat_upper = c_val.upper()
+        # Strict ETF vs Mutual Fund Segregation
+        matched_etf_cat = None
+        for etf_key, cat_name in EXACT_ETF_MAP.items():
+            if etf_key in sym:
+                matched_etf_cat = cat_name
                 break
 
-        if not matched_cat_upper:
-            for cat_upper in category_holdings.keys():
-                if cat_upper in sym or sym in cat_upper:
-                    matched_cat_upper = cat_upper
-                    break
-
-        if matched_cat_upper and matched_cat_upper in category_holdings:
+        if matched_etf_cat and matched_etf_cat in etf_categories:
             if t_type == 'buy':
-                category_holdings[matched_cat_upper]["qty"] += qty
-                category_holdings[matched_cat_upper]["invested"] += trade_val
+                etf_categories[matched_etf_cat]["qty"] += qty
+                etf_categories[matched_etf_cat]["invested"] += trade_val
             elif t_type == 'sell':
-                category_holdings[matched_cat_upper]["qty"] = max(0.0, category_holdings[matched_cat_upper]["qty"] - qty)
-                category_holdings[matched_cat_upper]["invested"] = max(0.0, category_holdings[matched_cat_upper]["invested"] - trade_val)
+                etf_categories[matched_etf_cat]["qty"] = max(0.0, etf_categories[matched_etf_cat]["qty"] - qty)
+                etf_categories[matched_etf_cat]["invested"] = max(0.0, etf_categories[matched_etf_cat]["invested"] - trade_val)
+        else:
+            # Mutual Fund Holding
+            mf_key = sym.split('-')[0].strip()
+            if mf_key not in mf_holdings:
+                mf_holdings[mf_key] = {"qty": 0.0, "invested": 0.0, "last_price": price}
+            if t_type == 'buy':
+                mf_holdings[mf_key]["qty"] += qty
+                mf_holdings[mf_key]["invested"] += trade_val
+                mf_holdings[mf_key]["last_price"] = price
+            elif t_type == 'sell':
+                mf_holdings[mf_key]["qty"] = max(0.0, mf_holdings[mf_key]["qty"] - qty)
+                mf_holdings[mf_key]["invested"] = max(0.0, mf_holdings[mf_key]["invested"] - trade_val)
 
     updated_portfolio = df_portfolio_base.copy()
     for idx, row in updated_portfolio.iterrows():
-        cat_upper = str(row["Category"]).strip().upper()
-        if cat_upper in category_holdings:
-            updated_portfolio.at[idx, "Units_Accumulated"] = category_holdings[cat_upper]["qty"]
-            updated_portfolio.at[idx, "Invested_Value"] = category_holdings[cat_upper]["invested"]
+        cat = row["Category"]
+        if cat in etf_categories:
+            updated_portfolio.at[idx, "Units_Accumulated"] = etf_categories[cat]["qty"]
+            updated_portfolio.at[idx, "Invested_Value"] = etf_categories[cat]["invested"]
 
-    temp_val = (updated_portfolio["Units_Accumulated"] * updated_portfolio["Current_LTP"]).sum()
+    # Mutual Fund Portfolio Construction
+    mf_rows = []
+    for mf_name, data in mf_holdings.items():
+        if data["invested"] > 0 and data["qty"] > 0:
+            mf_rows.append({
+                "Category": mf_name,
+                "Units_Accumulated": data["qty"],
+                "Current_LTP": data["last_price"],
+                "Invested_Value": data["invested"],
+                "Current_Value": data["qty"] * data["last_price"],
+                "P&L (₹)": (data["qty"] * data["last_price"]) - data["invested"]
+            })
+    df_mf_portfolio = pd.DataFrame(mf_rows)
+
+    etf_val = (updated_portfolio["Units_Accumulated"] * updated_portfolio["Current_LTP"]).sum()
+    mf_val = df_mf_portfolio["Current_Value"].sum() if not df_mf_portfolio.empty else 0.0
+    total_val = etf_val + mf_val
 
     if cash_flows:
-        cash_flows.append(float(temp_val if temp_val > 0 else 1.0))
+        cash_flows.append(float(total_val if total_val > 0 else 1.0))
         dates.append(datetime.now())
         computed_xirr = solve_xirr(cash_flows, dates)
     else:
         computed_xirr = None
 
-    return computed_xirr, updated_portfolio
-
-def calculate_loan_state(df_loan, initial_loan, current_global_rate):
-    p_balance = initial_loan
-    total_principal_cleared = 0.0
-    emi_principal_cleared = 0.0
-    prepay_principal_cleared = 0.0
-    
-    if not df_loan.empty:
-        df_sorted = df_loan.copy()
-        if "Date" in df_sorted.columns:
-            df_sorted["Date_DT"] = pd.to_datetime(df_sorted["Date"], errors="coerce")
-            df_sorted = df_sorted.sort_values("Date_DT")
-            
-        for _, row in df_sorted.iterrows():
-            p_type = str(row.get("Payment_Type", ""))
-            actual_pay = float(row.get("Actual_Payment", 0.0))
-            
-            row_rate = current_global_rate
-            if "Interest_Rate" in df_sorted.columns and not pd.isna(row.get("Interest_Rate")):
-                try:
-                    row_rate = float(row.get("Interest_Rate"))
-                except ValueError:
-                    pass
-                    
-            r_monthly = (row_rate / 100) / 12
-            
-            if p_type == "Pre-EMI":
-                pass
-            elif p_type == "Full EMI":
-                interest_portion = p_balance * r_monthly
-                principal_portion = max(0.0, actual_pay - interest_portion)
-                p_balance -= principal_portion
-                total_principal_cleared += principal_portion
-                emi_principal_cleared += principal_portion
-            elif "Prepayment" in p_type:
-                p_balance -= actual_pay
-                total_principal_cleared += actual_pay
-                prepay_principal_cleared += actual_pay
-                
-    p_balance = max(0.0, p_balance)
-    return p_balance, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared
-
-def project_ndz_target(current_principal, current_portfolio, current_rate, full_emi, is_handover, xirr_rate):
-    if current_portfolio >= current_principal:
-        return "Achieved", 0, 0
-        
-    p_bal = current_principal
-    port_val = current_portfolio
-    r_m_loan = (current_rate / 100) / 12
-    r_m_eq = (1 + xirr_rate)**(1/12) - 1
-    
-    sim_date = datetime.now()
-    handover_date = datetime(2027, 6, 1)
-    months = 0
-    
-    while port_val < p_bal and months < 360:
-        months += 1
-        curr_sim_date = sim_date + pd.DateOffset(months=months)
-        
-        if curr_sim_date < handover_date and not is_handover:
-            monthly_sip = 0.0
-            loan_interest = p_bal * r_m_loan
-        else:
-            monthly_sip = max(0.0, 60000.0 - full_emi)
-            loan_interest = p_bal * r_m_loan
-            p_red = max(0.0, full_emi - loan_interest)
-            p_bal = max(0.0, p_bal - p_red)
-            
-        port_val = (port_val + monthly_sip) * (1 + r_m_eq)
-        
-    projected_date = sim_date + pd.DateOffset(months=months)
-    return projected_date.strftime("%b %Y"), months // 12, months % 12
+    return computed_xirr, updated_portfolio, df_mf_portfolio
 
 TICKERS = {
     "Next 50": "NEXT50.NS", 
     "NIFTY 50": "NIFTYBEES.NS", 
     "GOLD": "GOLDBEES.NS", 
-    "Liquid": "LIQUIDBEES.NS",
-    "Mirae ELSS": "AMFI:135781"
+    "Liquid": "LIQUIDBEES.NS"
 }
 INITIAL_LOAN = 4890000.0
 LOAN_TENURE_YEARS = 30
@@ -306,62 +248,25 @@ LOAN_TENURE_YEARS = 30
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # Diagnostic warning if connection secrets are missing
-    if "connections" not in st.secrets or "gsheets" not in st.secrets["connections"]:
-        st.warning("⚠️ Google Sheets secrets missing from Streamlit Cloud. Please add `[connections.gsheets]` under Settings -> Secrets.")
-
-    try:
-        df_loan = conn.read(worksheet="Loan_Tracker", ttl=0)
-    except Exception as e:
-        st.warning(f"Could not load 'Loan_Tracker' tab: {e}")
-        df_loan = pd.DataFrame(columns=["Date", "Month_Year", "Expected_Payment", "Actual_Payment", "Payment_Type", "Confirmed", "Interest_Rate"])
+    try: df_loan = conn.read(worksheet="Loan_Tracker", ttl=0)
+    except Exception: df_loan = pd.DataFrame()
         
-    try:
-        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=0)
-    except Exception as e:
-        st.warning(f"Could not load 'Portfolio_Tracker' tab: {e}")
-        df_portfolio = pd.DataFrame(columns=["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"])
+    try: df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=0)
+    except Exception: df_portfolio = pd.DataFrame()
         
-    try:
-        df_raw_trades = conn.read(worksheet="Raw_Trades", ttl=0)
-    except Exception as e:
-        st.warning(f"Could not load 'Raw_Trades' tab: {e}")
-        df_raw_trades = pd.DataFrame()
-
-    try:
-        df_inv_log = conn.read(worksheet="Investment_Log", ttl=0)
-    except Exception as e:
-        df_inv_log = pd.DataFrame(columns=["Date", "Month_Year", "Actual_SIP", "Total_Invested", "Total_Value"])
-
-    try:
-        df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
-        if not df_settings.empty:
-            disbursed_ratio = 0.90
-            if "Disbursed_Ratio" in df_settings.columns and not pd.isna(df_settings.iloc[0]["Disbursed_Ratio"]):
-                disbursed_ratio = float(df_settings.iloc[0]["Disbursed_Ratio"])
-                
-            is_handover_completed = False
-            if "Handover_Completed" in df_settings.columns:
-                is_handover_completed = str(df_settings.iloc[0]["Handover_Completed"]).strip().upper() == "TRUE"
-                
-            current_interest_rate = 7.20
-            if "Interest_Rate" in df_settings.columns and not pd.isna(df_settings.iloc[0]["Interest_Rate"]):
-                current_interest_rate = float(df_settings.iloc[0]["Interest_Rate"])
-        else:
-            disbursed_ratio, is_handover_completed, current_interest_rate = 0.90, False, 7.20
-    except Exception:
-        disbursed_ratio, is_handover_completed, current_interest_rate = 0.90, False, 7.20
+    try: df_raw_trades = conn.read(worksheet="Raw_Trades", ttl=0)
+    except Exception: df_raw_trades = pd.DataFrame()
 
     if df_portfolio.empty:
         df_portfolio = pd.DataFrame({
-            "Category": ["Next 50", "NIFTY 50", "GOLD", "Liquid", "Mirae ELSS"],
-            "Units_Accumulated": [0.0, 0.0, 0.0, 0.0, 0.0],
-            "Current_LTP": [0.0, 0.0, 0.0, 0.0, 0.0],
-            "Invested_Value": [0.0, 0.0, 0.0, 0.0, 0.0]
+            "Category": ["Next 50", "NIFTY 50", "GOLD", "Liquid"],
+            "Units_Accumulated": [0.0, 0.0, 0.0, 0.0],
+            "Current_LTP": [0.0, 0.0, 0.0, 0.0],
+            "Invested_Value": [0.0, 0.0, 0.0, 0.0]
         })
-    return df_loan, df_portfolio, df_raw_trades, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate
+    return df_loan, df_portfolio, df_raw_trades
 
-df_loan, df_portfolio, df_raw_trades, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate = load_data()
+df_loan, df_portfolio, df_raw_trades = load_data()
 
 for idx, row in df_portfolio.iterrows():
     cat = row["Category"]
@@ -374,110 +279,55 @@ df_portfolio["Units_Accumulated"] = pd.to_numeric(df_portfolio["Units_Accumulate
 df_portfolio["Current_LTP"] = pd.to_numeric(df_portfolio["Current_LTP"], errors='coerce').fillna(0.0)
 df_portfolio["Invested_Value"] = pd.to_numeric(df_portfolio["Invested_Value"], errors='coerce').fillna(0.0)
 
-computed_xirr, df_portfolio = process_raw_trades_tab(df_raw_trades, df_portfolio)
-
-for idx, row in df_portfolio.iterrows():
-    if row["Current_LTP"] <= 0 and row["Units_Accumulated"] > 0 and row["Invested_Value"] > 0:
-        df_portfolio.at[idx, "Current_LTP"] = row["Invested_Value"] / row["Units_Accumulated"]
+computed_xirr, df_portfolio, df_mf_portfolio = process_raw_trades_tab(df_raw_trades, df_portfolio)
 
 df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
 df_portfolio["P&L (₹)"] = df_portfolio["Current_Value"] - df_portfolio["Invested_Value"]
 
-total_portfolio_val = df_portfolio["Current_Value"].sum()
-total_portfolio_invested = df_portfolio["Invested_Value"].sum()
+# Combined Totals
+etf_val = df_portfolio["Current_Value"].sum()
+etf_inv = df_portfolio["Invested_Value"].sum()
+mf_val = df_mf_portfolio["Current_Value"].sum() if not df_mf_portfolio.empty else 0.0
+mf_inv = df_mf_portfolio["Invested_Value"].sum() if not df_mf_portfolio.empty else 0.0
+
+total_portfolio_val = etf_val + mf_val
+total_portfolio_invested = etf_inv + mf_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
-
-if computed_xirr is not None:
-    calculated_xirr = computed_xirr
-    xirr_source = "Auto-Synced Gmail Contract Notes"
-else:
-    calculated_xirr = 0.12
-    xirr_source = "Default Baseline (12.0%)"
-
-current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
-    df_loan, INITIAL_LOAN, current_interest_rate
-)
-
-r_monthly = (current_interest_rate / 100) / 12
-n_months_base = LOAN_TENURE_YEARS * 12
-full_emi = INITIAL_LOAN * r_monthly * ((1 + r_monthly)**n_months_base) / (((1 + r_monthly)**n_months_base) - 1)
-
-disbursed_loan_amount = INITIAL_LOAN * disbursed_ratio
-monthly_pre_emi = (disbursed_loan_amount * (current_interest_rate / 100)) / 12
-
-is_handover = is_handover_completed or disbursed_ratio >= 1.0
-
-if is_handover:
-    active_due_label = "Monthly EMI Due"
-    active_due_amount = full_emi
-    disbursement_badge = "100% Disbursed (Handover Complete)"
-else:
-    active_due_label = "Pre-EMI Due"
-    active_due_amount = monthly_pre_emi
-    disbursement_badge = f"{int(disbursed_ratio * 100)}% Disbursed"
-
-current_rem_months = calc_rem_months(current_principal, full_emi, r_monthly)
-rem_years = current_rem_months / 12
-
-is_ndz_achieved = total_portfolio_val >= current_principal
-
-proj_date, proj_yrs, proj_mos = project_ndz_target(
-    current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, xirr_rate=calculated_xirr
-)
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
 with st.container(border=True):
     st.subheader("🎯 Net-Debt-Zero Visualizer")
-    net_debt = current_principal - total_portfolio_val
-    nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
+    net_debt = max(0.0, INITIAL_LOAN - total_portfolio_val)
+    nd_covered_pct = (total_portfolio_val / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 100.0
     
     nd_col1, nd_col2 = st.columns([3, 1])
     with nd_col1:
-        st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
+        st.progress(min(total_portfolio_val / INITIAL_LOAN, 1.0))
         st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target")
     with nd_col2:
-        if is_ndz_achieved: 
-            st.success("🎉 Zero Debt Achieved!")
-        else: 
-            st.metric("Net Debt Pending", format_inr(net_debt))
-
-    if not is_ndz_achieved:
-        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{calculated_xirr*100:.2f}% XIRR** via {xirr_source})")
+        st.metric("Net Debt Pending", format_inr(net_debt))
 
     st.divider()
 
     s_col1, s_col2, s_col3, s_col4 = st.columns(4)
-    pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
-    
-    s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
+    s_col1.metric("Initial Loan", format_inr(INITIAL_LOAN))
     s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
     s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
     s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
 
 st.divider()
 
-st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
+st.subheader("2. Live Portfolio Holdings")
 
-m_col1, m_col2, m_col3 = st.columns(3)
-with m_col1:
-    st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
-with m_col2:
-    st.metric("Interest Rate", f"{current_interest_rate}%", "Floating Rate")
-with m_col3:
-    st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
-
-st.divider()
-
-st.subheader("2. Live Portfolio Holdings & Capital Flow")
-
-active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
-
-if active_holdings.empty:
-    st.info("No active equity/ETF investments parsed yet from the 'Raw_Trades' tab.")
+# Render ETFs
+st.markdown("#### 📊 ETF Holdings")
+active_etfs = df_portfolio[df_portfolio["Invested_Value"] > 0]
+if active_etfs.empty:
+    st.info("No active ETF holdings found.")
 else:
-    for _, row in active_holdings.iterrows():
+    for _, row in active_etfs.iterrows():
         cat = row["Category"]
         units = row["Units_Accumulated"]
         ltp = row["Current_LTP"]
@@ -487,11 +337,26 @@ else:
         pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
         
         with st.container(border=True):
-            st.markdown(
-                f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>", 
-                unsafe_allow_html=True
-            )
-            
+            st.markdown(f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>", unsafe_allow_html=True)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Invested", format_inr(inv))
+            m2.metric("Current Value", format_inr(curr))
+            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+
+# Render Mutual Funds
+if not df_mf_portfolio.empty:
+    st.markdown("#### 💼 Mutual Fund Holdings")
+    for _, row in df_mf_portfolio.iterrows():
+        cat = row["Category"]
+        units = row["Units_Accumulated"]
+        ltp = row["Current_LTP"]
+        inv = row["Invested_Value"]
+        curr = row["Current_Value"]
+        pnl = row["P&L (₹)"]
+        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
+        
+        with st.container(border=True):
+            st.markdown(f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} NAV</span>", unsafe_allow_html=True)
             m1, m2, m3 = st.columns(3)
             m1.metric("Invested", format_inr(inv))
             m2.metric("Current Value", format_inr(curr))
