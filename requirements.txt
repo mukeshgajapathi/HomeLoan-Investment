@@ -5,4 +5,3 @@ st-gsheets-connection
 gspread
 kiteconnect
 openpyxl
-streamlit-gsheets
