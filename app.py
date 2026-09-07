@@ -521,7 +521,7 @@ with manifest_col:
     is_manifest_mode = st.toggle(
         "✨ **Manifest Net-Debt-Zero (Dec 2035)**",
         value=False,
-        help="Visualize reaching ₹1 Crore corpus & ₹0 debt by December 2035 without altering live sheets data."
+        help="Visualize reaching ₹1 Crore corpus & ₹0 debt by December 2035 at 13.6% XIRR."
     )
 
 # --- OVERRIDE LOGIC FOR MANIFESTATION / VISUALIZATION MODE ---
@@ -542,14 +542,14 @@ if is_manifest_mode:
     proj_date = "Dec 2035"
     proj_yrs = 0
     proj_mos = 0
-    console_xirr = 13.6  # Fixed at 13.6% for Dec 2035 Manifestation Screen
+    console_xirr = 13.6  # Fixed at 13.6% XIRR for Dec 2035 Manifestation Screen
 
     st.success(
-        "🙏 **Goal:**\n"
-        "I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown more than home loan princple generating effortless financial peace and security."
+        "🙏 **Goal:** I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown "
+        "more than home loan principal, generating effortless financial peace and security."
     )
 
-# Summary Section
+# Summary Section (Net-Debt-Zero Visualizer Card)
 with st.container(border=True):
     st.subheader("🎯 Net-Debt-Zero Visualizer")
     net_debt = max(0.0, current_principal - total_portfolio_val)
@@ -580,6 +580,20 @@ with st.container(border=True):
     s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
     s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
     s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
+
+# --- ABRAHAM HICKS VIBRATIONAL AFFIRMATIONS CARD & MANIFESTATION ISOLATION ---
+if is_manifest_mode:
+    st.divider()
+    with st.container(border=True):
+        st.markdown("### ✨ Abraham Hicks Vibrational Money Affirmations")
+        st.markdown(
+            "💫 *“Money flows to me easily, frequently, and abundantly. The Universe is constantly yielding wealth to me as I relax and allow.”*\n\n"
+            "💫 *“Everything is working out for me. Freedom, ease, and financial security are my natural state of being.”*\n\n"
+            "💫 *“My home is 100% mine, fully backed by an overflowing portfolio corpus. I am in complete vibrational alignment with financial independence.”*\n\n"
+            "💫 *“I love knowing that abundance is consistent, effortless, and always finding its way to me.”*"
+        )
+    # Stop execution here so only this card and visualizer are rendered
+    st.stop()
 
 st.divider()
 
@@ -668,7 +682,7 @@ with st.form("emi_form", clear_on_submit=True):
         else:
             st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
 
-    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid or is_manifest_mode):
+    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
         new_row = pd.DataFrame([{
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
             "Month_Year": current_month_str, 
@@ -758,7 +772,7 @@ with sec2_act_col:
             help="Enter overall portfolio XIRR % from Zerodha Console. Negative, zero, and positive values are allowed."
         )
 
-        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings", disabled=is_manifest_mode):
+        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings"):
             missing_accounts = [fname for fname, acc in account_mapping.items() if not acc]
             if input_xirr is None:
                 st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
@@ -937,7 +951,7 @@ else:
     pp_input_col1, pp_input_col2 = st.columns(2)
 
     if "4% Portfolio Corpus" in prepay_strategy_type:
-        enable_pp = is_xirr_valid and is_corpus_sufficient and (not has_4pct_executed) and (not is_manifest_mode)
+        enable_pp = is_xirr_valid and is_corpus_sufficient and (not has_4pct_executed)
         
         with pp_input_col1:
             st.info(f"Active Console XIRR: **{console_xirr:.2f}%**" if console_xirr is not None else "Active Console XIRR: Not set")
@@ -962,7 +976,7 @@ else:
         st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
 
     else: # Service Monthly EMI from Corpus
-        enable_pp = not is_manifest_mode
+        enable_pp = True
         with pp_input_col1:
             st.info(f"Monthly EMI of **{format_inr(full_emi)}** will be withdrawn from portfolio corpus.")
             
