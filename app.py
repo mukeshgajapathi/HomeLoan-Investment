@@ -63,6 +63,20 @@ def format_inr(value):
     except ValueError:
         return "₹0"
 
+# --- ZERODHA SYMBOL TO DASHBOARD CATEGORY MAPPER ---
+SYMBOL_MAP = {
+    "NEXT50": "Next 50",
+    "NEXT50.NS": "Next 50",
+    "NIFTYBEES": "NIFTY 50",
+    "NIFTYBEES.NS": "NIFTY 50",
+    "GOLDBEES": "GOLD",
+    "GOLDBEES.NS": "GOLD",
+    "LIQUIDBEES": "Liquid",
+    "LIQUIDBEES.NS": "Liquid",
+    "MIRAE": "Mirae ELSS",
+    "MIRAE ELSS": "Mirae ELSS"
+}
+
 # --- LIVE LTP FETCHING (ETF VIA YFINANCE & MUTUAL FUND VIA AMFI API) ---
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker):
@@ -107,44 +121,9 @@ def calc_rem_months(principal, emi, rate_monthly):
     except ValueError:
         return 0
 
-# --- EXACT XIRR SOLVER (NEWTON-RAPHSON ENGINE) ---
-def calculate_exact_xirr(df_inv_log, current_portfolio_val, guess=0.12):
-    """Calculates exact XIRR using historical cash flows from Investment_Log."""
+# --- NEWTON-RAPHSON XIRR SOLVER ---
+def solve_xirr(cash_flows, dates, guess=0.12):
     try:
-        if df_inv_log.empty or current_portfolio_val <= 0:
-            return 0.12
-
-        df_temp = df_inv_log.copy()
-        df_temp["Date_DT"] = pd.to_datetime(df_temp["Date"], errors="coerce")
-        df_temp["Actual_SIP"] = pd.to_numeric(df_temp["Actual_SIP"], errors="coerce").fillna(0.0)
-        df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
-
-        cash_flows = []
-        dates = []
-
-        # Outflows: Historical SIPs logged
-        for _, row in df_temp.iterrows():
-            sip_amt = float(row["Actual_SIP"])
-            if sip_amt > 0:
-                cash_flows.append(-sip_amt)
-                dates.append(row["Date_DT"])
-
-        # Fallback: If no explicit Actual_SIPs exist, use Total_Invested entries
-        if len(cash_flows) == 0 and "Total_Invested" in df_temp.columns:
-            df_temp["Total_Invested"] = pd.to_numeric(df_temp["Total_Invested"], errors="coerce").fillna(0.0)
-            prev_inv = 0.0
-            for _, row in df_temp.iterrows():
-                curr_inv = float(row["Total_Invested"])
-                delta = curr_inv - prev_inv
-                if delta > 0:
-                    cash_flows.append(-delta)
-                    dates.append(row["Date_DT"])
-                prev_inv = curr_inv
-
-        # Terminal Inflow: Current live portfolio valuation today
-        cash_flows.append(float(current_portfolio_val))
-        dates.append(datetime.now())
-
         if len(cash_flows) < 2 or sum(cash_flows) == 0:
             return 0.12
 
@@ -166,10 +145,126 @@ def calculate_exact_xirr(df_inv_log, current_portfolio_val, guess=0.12):
             if abs(df_val) < 1e-12: break
             new_r = r - f_val / df_val
             if abs(new_r - r) < 1e-6:
-                return max(0.05, min(new_r, 0.25))  # Bound between 5% and 25% for safety
+                return max(0.05, min(new_r, 0.35))
             r = new_r
 
-        return max(0.05, min(r, 0.25))
+        return max(0.05, min(r, 0.35))
+    except Exception:
+        return 0.12
+
+# --- MULTI-ACCOUNT ZERODHA TRADEBOOK PARSER (XIRR + AUTO HOLDINGS SYNC) ---
+def process_zerodha_tradebooks(uploaded_files, df_portfolio_base):
+    all_cash_flows = []
+    all_dates = []
+    category_holdings = {cat: {"qty": 0.0, "invested": 0.0} for cat in df_portfolio_base["Category"].tolist()}
+
+    for file in uploaded_files:
+        try:
+            df = pd.read_csv(file)
+            df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
+
+            date_col = next((c for c in df.columns if 'date' in c), None)
+            symbol_col = next((c for c in df.columns if 'symbol' in c or 'tradingsymbol' in c), None)
+            type_col = next((c for c in df.columns if 'type' in c), None)
+            qty_col = next((c for c in df.columns if 'qty' in c or 'quantity' in c), None)
+            price_col = next((c for c in df.columns if 'price' in c or 'rate' in c or 'value' in c), None)
+
+            if date_col and type_col and qty_col and price_col:
+                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                df = df.dropna(subset=[date_col])
+
+                for _, row in df.iterrows():
+                    t_type = str(row[type_col]).strip().lower()
+                    qty = float(row[qty_col]) if not pd.isna(row[qty_col]) else 0.0
+                    price = float(row[price_col]) if not pd.isna(row[price_col]) else 0.0
+                    trade_val = qty * price
+
+                    if trade_val > 0:
+                        if t_type == 'buy':
+                            all_cash_flows.append(-trade_val)
+                            all_dates.append(row[date_col])
+                        elif t_type == 'sell':
+                            all_cash_flows.append(trade_val)
+                            all_dates.append(row[date_col])
+
+                    # Aggregate Holdings by Category
+                    if symbol_col and not pd.isna(row[symbol_col]):
+                        sym = str(row[symbol_col]).strip().upper()
+                        matched_cat = None
+                        for s_key, c_val in SYMBOL_MAP.items():
+                            if s_key in sym:
+                                matched_cat = c_val
+                                break
+                        
+                        if matched_cat in category_holdings:
+                            if t_type == 'buy':
+                                category_holdings[matched_cat]["qty"] += qty
+                                category_holdings[matched_cat]["invested"] += trade_val
+                            elif t_type == 'sell':
+                                category_holdings[matched_cat]["qty"] = max(0.0, category_holdings[matched_cat]["qty"] - qty)
+                                category_holdings[matched_cat]["invested"] = max(0.0, category_holdings[matched_cat]["invested"] - trade_val)
+        except Exception:
+            pass
+
+    if not all_cash_flows:
+        return None, None
+
+    # Construct Updated Portfolio DataFrame
+    updated_portfolio = df_portfolio_base.copy()
+    for idx, row in updated_portfolio.iterrows():
+        cat = row["Category"]
+        if cat in category_holdings:
+            updated_portfolio.at[idx, "Units_Accumulated"] = category_holdings[cat]["qty"]
+            updated_portfolio.at[idx, "Invested_Value"] = category_holdings[cat]["invested"]
+
+    # Calculate live valuation for XIRR terminal cash flow
+    temp_val = (updated_portfolio["Units_Accumulated"] * updated_portfolio["Current_LTP"]).sum()
+
+    combined_df = pd.DataFrame({"Date": all_dates, "CF": all_cash_flows}).sort_values("Date")
+    sorted_cfs = combined_df["CF"].tolist()
+    sorted_dates = combined_df["Date"].tolist()
+
+    sorted_cfs.append(float(temp_val if temp_val > 0 else 1.0))
+    sorted_dates.append(datetime.now())
+
+    computed_xirr = solve_xirr(sorted_cfs, sorted_dates)
+    return computed_xirr, updated_portfolio
+
+# --- FALLBACK XIRR FROM INVESTMENT LOG ---
+def calculate_fallback_xirr(df_inv_log, current_portfolio_val):
+    try:
+        if df_inv_log.empty or current_portfolio_val <= 0:
+            return 0.12
+
+        df_temp = df_inv_log.copy()
+        df_temp["Date_DT"] = pd.to_datetime(df_temp["Date"], errors="coerce")
+        df_temp["Actual_SIP"] = pd.to_numeric(df_temp["Actual_SIP"], errors="coerce").fillna(0.0)
+        df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
+
+        cash_flows = []
+        dates = []
+
+        for _, row in df_temp.iterrows():
+            sip_amt = float(row["Actual_SIP"])
+            if sip_amt > 0:
+                cash_flows.append(-sip_amt)
+                dates.append(row["Date_DT"])
+
+        if len(cash_flows) == 0 and "Total_Invested" in df_temp.columns:
+            df_temp["Total_Invested"] = pd.to_numeric(df_temp["Total_Invested"], errors="coerce").fillna(0.0)
+            prev_inv = 0.0
+            for _, row in df_temp.iterrows():
+                curr_inv = float(row["Total_Invested"])
+                delta = curr_inv - prev_inv
+                if delta > 0:
+                    cash_flows.append(-delta)
+                    dates.append(row["Date_DT"])
+                prev_inv = curr_inv
+
+        cash_flows.append(float(current_portfolio_val))
+        dates.append(datetime.now())
+
+        return solve_xirr(cash_flows, dates)
     except Exception:
         return 0.12
 
@@ -365,8 +460,13 @@ total_portfolio_invested = df_portfolio["Invested_Value"].sum()
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
-# --- CALCULATE EXACT PORTFOLIO XIRR ---
-calculated_xirr = calculate_exact_xirr(df_inv_log, total_portfolio_val)
+# --- DETERMINE ACTIVE XIRR RATE ---
+if "tradebook_xirr" in st.session_state:
+    calculated_xirr = st.session_state["tradebook_xirr"]
+    xirr_source = "Combined Zerodha Tradebooks"
+else:
+    calculated_xirr = calculate_fallback_xirr(df_inv_log, total_portfolio_val)
+    xirr_source = "Investment Log"
 
 # --- DERIVED PRIOR INVESTED BASELINE FOR SIP / SWP CALCULATION ---
 current_month_str = datetime.now().strftime("%b %Y")
@@ -414,7 +514,7 @@ min_prepayment_allowed = 2 * full_emi
 corpus_4_pct = 0.04 * total_portfolio_val
 is_ndz_achieved = total_portfolio_val >= current_principal
 
-# Run Forward NDZ Projection using Calculated XIRR
+# Run Forward NDZ Projection
 proj_date, proj_yrs, proj_mos = project_ndz_target(
     current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, xirr_rate=calculated_xirr
 )
@@ -439,7 +539,7 @@ with st.container(border=True):
             st.metric("Net Debt Pending", format_inr(net_debt))
 
     if not is_ndz_achieved:
-        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{calculated_xirr*100:.2f}% Calculated Portfolio XIRR**)")
+        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{calculated_xirr*100:.2f}% XIRR** via {xirr_source})")
 
     st.divider()
 
@@ -565,59 +665,87 @@ with st.container(border=True):
 st.divider()
 
 # --- PART 2: LIVE PORTFOLIO HOLDINGS & DYNAMIC SIP / SWP TRACKER ---
-sec2_col1, sec2_col2 = st.columns([3, 1])
+sec2_col1, sec2_col2 = st.columns([2, 1])
 
 with sec2_col1:
     st.subheader("2. Live Portfolio Holdings & Capital Flow")
 with sec2_col2:
-    with st.popover("✏️ Edit Holdings", width="stretch"):
-        st.markdown("### 📊 Update Asset Holdings")
-        st.caption("Editing Qty & Invested Amount dynamically calculates your monthly SIP / SWP:")
-        
-        editor_df = df_portfolio[["Category", "Units_Accumulated", "Invested_Value"]].copy()
-        
-        edited_data = st.data_editor(
-            editor_df,
-            column_config={
-                "Category": st.column_config.TextColumn("Holding Name", disabled=True),
-                "Units_Accumulated": st.column_config.NumberColumn("Qty", min_value=0.0, step=1.0, format="%.4f"),
-                "Invested_Value": st.column_config.NumberColumn("Invested Amount (₹)", min_value=0.0, step=1000.0, format="%.2f")
-            },
-            hide_index=True,
-            width="stretch"
-        )
-        
-        if st.button("💾 Save All Holdings Updates", type="primary", width="stretch"):
-            df_portfolio["Units_Accumulated"] = edited_data["Units_Accumulated"]
-            df_portfolio["Invested_Value"] = edited_data["Invested_Value"]
+    p_c1, p_c2 = st.columns(2)
+    with p_c1:
+        with st.popover("📁 Import Tradebooks", width="stretch"):
+            st.markdown("### 📥 Import Zerodha Tradebook CSVs")
+            st.caption("Upload Zerodha Console Tradebook CSVs for **both you and your wife** to auto-sync holdings & calculate exact combined XIRR:")
             
-            for i, r in df_portfolio.iterrows():
-                if r["Current_LTP"] <= 0 and r["Units_Accumulated"] > 0 and r["Invested_Value"] > 0:
-                    df_portfolio.at[i, "Current_LTP"] = r["Invested_Value"] / r["Units_Accumulated"]
+            uploaded_tb_files = st.file_uploader(
+                "Select Tradebook CSVs", 
+                type=["csv"], 
+                accept_multiple_files=True,
+                key="tradebook_uploader"
+            )
+            
+            if uploaded_tb_files and st.button("⚡ Sync Holdings & Calculate XIRR", type="primary", width="stretch"):
+                tb_xirr, updated_tb_portfolio = process_zerodha_tradebooks(uploaded_tb_files, df_portfolio)
+                if tb_xirr is not None and updated_tb_portfolio is not None:
+                    st.session_state["tradebook_xirr"] = tb_xirr
+                    
+                    # Update Google Sheets Portfolio Tracker automatically
+                    df_to_save = updated_tb_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
+                    conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
+                    
+                    st.success(f"Successfully synced holdings and computed combined XIRR: {tb_xirr*100:.2f}%!")
+                    st.rerun()
+                else:
+                    st.error("Could not parse tradebook CSVs. Ensure you uploaded valid Zerodha Tradebook CSV files.")
 
-            df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
+    with p_c2:
+        with st.popover("✏️ Edit Holdings", width="stretch"):
+            st.markdown("### 📊 Update Asset Holdings")
+            st.caption("Editing Qty & Invested Amount dynamically calculates your monthly SIP / SWP:")
             
-            new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
-            new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
+            editor_df = df_portfolio[["Category", "Units_Accumulated", "Invested_Value"]].copy()
+            
+            edited_data = st.data_editor(
+                editor_df,
+                column_config={
+                    "Category": st.column_config.TextColumn("Holding Name", disabled=True),
+                    "Units_Accumulated": st.column_config.NumberColumn("Qty", min_value=0.0, step=1.0, format="%.4f"),
+                    "Invested_Value": st.column_config.NumberColumn("Invested Amount (₹)", min_value=0.0, step=1000.0, format="%.2f")
+                },
+                hide_index=True,
+                width="stretch"
+            )
+            
+            if st.button("💾 Save All Holdings Updates", type="primary", width="stretch"):
+                df_portfolio["Units_Accumulated"] = edited_data["Units_Accumulated"]
+                df_portfolio["Invested_Value"] = edited_data["Invested_Value"]
+                
+                for i, r in df_portfolio.iterrows():
+                    if r["Current_LTP"] <= 0 and r["Units_Accumulated"] > 0 and r["Invested_Value"] > 0:
+                        df_portfolio.at[i, "Current_LTP"] = r["Invested_Value"] / r["Units_Accumulated"]
 
-            new_derived_sip = round(new_total_inv - prior_invested, 2)
+                df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
+                
+                new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
+                new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
 
-            df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
-            conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
-            
-            snapshot_row = pd.DataFrame([{
-                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "Month_Year": current_month_str,
-                "Actual_SIP": new_derived_sip,
-                "Total_Invested": new_total_inv,
-                "Total_Value": new_total_val
-            }])
-            
-            updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
-            conn.update(worksheet="Investment_Log", data=updated_inv_log)
-            
-            st.success(f"Holdings updated! Auto-calculated monthly flow: {format_inr(new_derived_sip)}")
-            st.rerun()
+                new_derived_sip = round(new_total_inv - prior_invested, 2)
+
+                df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
+                conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
+                
+                snapshot_row = pd.DataFrame([{
+                    "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Month_Year": current_month_str,
+                    "Actual_SIP": new_derived_sip,
+                    "Total_Invested": new_total_inv,
+                    "Total_Value": new_total_val
+                }])
+                
+                updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
+                conn.update(worksheet="Investment_Log", data=updated_inv_log)
+                
+                st.success(f"Holdings updated! Auto-calculated monthly flow: {format_inr(new_derived_sip)}")
+                st.rerun()
 
 # --- INTEGRATED DYNAMIC EQUITY SIP / SWP TRACKER CARD ---
 with st.container(border=True):
@@ -658,7 +786,7 @@ with st.container(border=True):
 active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
 
 if active_holdings.empty:
-    st.info("No active investments logged yet. Click '✏️ Edit Holdings' to enter your asset holdings.")
+    st.info("No active investments logged yet. Click '✏️ Edit Holdings' or '📁 Import Tradebooks' to sync your asset holdings.")
 else:
     for _, row in active_holdings.iterrows():
         cat = row["Category"]
@@ -719,12 +847,11 @@ else:
     pp_input_col1, pp_input_col2 = st.columns(2)
 
     with pp_input_col1:
-        # Pre-fill with calculated XIRR while leaving field editable
         user_xirr = st.number_input(
-            "Portfolio XIRR (%) [Auto-Calculated]", 
+            f"Portfolio XIRR (%) [{xirr_source}]", 
             value=float(round(calculated_xirr * 100, 2)), 
             step=0.5, 
-            help="Auto-calculated from your Investment_Log. You can also override with Zerodha Console XIRR."
+            help="Auto-calculated from tradebooks/logs. You can also override manually."
         )
 
     is_xirr_valid = user_xirr > 10.0
