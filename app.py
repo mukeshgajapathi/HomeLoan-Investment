@@ -178,7 +178,6 @@ def process_tradebook_tab(df_tradebook):
     seg_col = 'segment' if 'segment' in df_raw.columns else None
     isin_col = 'isin' if 'isin' in df_raw.columns else None
 
-    # Detect Account ID column
     acc_col = None
     for possible_acc in ['account', 'account_id', 'client_id', 'user', 'owner']:
         if possible_acc in df_raw.columns:
@@ -202,8 +201,6 @@ def process_tradebook_tab(df_tradebook):
         
         raw_seg = str(row.get(seg_col, "")).strip().upper() if seg_col else ""
         isin_val = str(row.get(isin_col, "")).strip() if isin_col else ""
-        
-        # Read raw Account ID (e.g. HEK312 or SDB789)
         acc_val = str(row.get(acc_col, "SDB789")).strip().upper() if acc_col else "SDB789"
         if acc_val in ["NAN", "NONE", ""]: acc_val = "SDB789"
 
@@ -317,6 +314,78 @@ def load_data():
     return df_tradebook
 
 df_tradebook = load_data()
+
+# --- UPLOAD WIDGET & AUTOMATIC DEDUPLICATION ---
+with st.sidebar:
+    st.header("⚙️ Tradebook Importer")
+    uploaded_files = st.file_uploader(
+        "Upload Zerodha Tradebook CSVs", 
+        type=["csv"], 
+        accept_multiple_files=True,
+        help="Upload tradebook-HEK312-MF.csv, tradebook-SDB789-EQ.csv, or monthly updates."
+    )
+
+    if uploaded_files:
+        if st.button("📥 Import & Sync to Google Sheets"):
+            new_records = []
+            
+            for file in uploaded_files:
+                # 1. Extract Account ID from Filename (e.g. HEK312 or SDB789)
+                match = re.search(r'\b([A-Z0-9]{6})\b', file.name.upper())
+                acc_id = match.group(1) if match else "SDB789"
+                
+                try:
+                    df_uploaded = pd.read_csv(file)
+                    df_uploaded.columns = [str(c).strip().lower() for c in df_uploaded.columns]
+                    
+                    # Add account column
+                    df_uploaded['account'] = acc_id
+                    new_records.append(df_uploaded)
+                    st.info(f"Loaded {len(df_uploaded)} trades for **{acc_id}** from `{file.name}`")
+                except Exception as e:
+                    st.error(f"Error reading `{file.name}`: {e}")
+
+            if new_records:
+                df_new_combined = pd.concat(new_records, ignore_index=True)
+                
+                # Merge existing Google Sheet trades with newly uploaded trades
+                df_existing = df_tradebook.copy()
+                if not df_existing.empty:
+                    df_existing.columns = [str(c).strip().lower() for c in df_existing.columns]
+                
+                df_all_merged = pd.concat([df_existing, df_new_combined], ignore_index=True)
+                
+                # Deduplication Key Logic
+                sym_col = 'symbol' if 'symbol' in df_all_merged.columns else df_all_merged.columns[0]
+                date_col = 'trade_date' if 'trade_date' in df_all_merged.columns else 'date'
+                type_col = 'trade_type' if 'trade_type' in df_all_merged.columns else 'type'
+                qty_col = 'quantity' if 'quantity' in df_all_merged.columns else 'qty'
+                price_col = 'price' if 'price' in df_all_merged.columns else 'rate'
+                trade_id_col = 'trade_id' if 'trade_id' in df_all_merged.columns else qty_col
+
+                df_all_merged["unique_key"] = (
+                    df_all_merged["account"].astype(str) + "_" +
+                    df_all_merged[date_col].astype(str) + "_" +
+                    df_all_merged[sym_col].astype(str) + "_" +
+                    df_all_merged[type_col].astype(str) + "_" +
+                    df_all_merged[qty_col].astype(str) + "_" +
+                    df_all_merged[price_col].astype(str) + "_" +
+                    df_all_merged[trade_id_col].astype(str)
+                )
+
+                # Eliminate duplicates
+                df_deduped = df_all_merged.drop_duplicates(subset=["unique_key"]).drop(columns=["unique_key"]).reset_index(drop=True)
+                df_deduped = df_deduped.fillna("")
+
+                # Write to Google Sheets
+                try:
+                    conn.update(worksheet="Tradebook", data=df_deduped)
+                    st.success(f"🎉 Successfully synced! Total unique trades in sheet: {len(df_deduped)}")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to update Google Sheets: {e}")
+
 computed_xirr, df_eq_active, df_mf_active = process_tradebook_tab(df_tradebook)
 
 eq_val = df_eq_active["Current_Value"].sum() if not df_eq_active.empty else 0.0
