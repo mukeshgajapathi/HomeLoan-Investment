@@ -44,7 +44,6 @@ if not check_password():
 # --- APP LOGIC (RUNS IF AUTHENTICATED) ---
 # ==========================================
 
-# --- HELPER: INDIAN CURRENCY FORMATTER ---
 def format_inr(value):
     try:
         is_negative = value < 0
@@ -72,7 +71,6 @@ SYMBOL_MAP = {
     "MIRAE": "Mirae ELSS"
 }
 
-# Filter to exclude Derivatives & Commodities
 EXCLUDE_KEYWORDS = ["FUT", "CE", "PE", "MCX", "GOLDPETAL", "GOLDGUINEA", "CRUDEOIL"]
 
 def is_equity_or_etf(symbol_str):
@@ -82,7 +80,6 @@ def is_equity_or_etf(symbol_str):
             return False
     return True
 
-# --- LIVE LTP FETCHING ---
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker):
     if ticker.startswith("AMFI:"):
@@ -126,7 +123,6 @@ def calc_rem_months(principal, emi, rate_monthly):
     except ValueError:
         return 0
 
-# --- NEWTON-RAPHSON XIRR SOLVER ---
 def solve_xirr(cash_flows, dates, guess=0.12):
     try:
         if len(cash_flows) < 2 or sum(cash_flows) == 0:
@@ -157,19 +153,19 @@ def solve_xirr(cash_flows, dates, guess=0.12):
     except Exception:
         return 0.12
 
-# --- PROCESS RAW TRADES FOR HOLDINGS & XIRR ---
 def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
     if df_raw_trades.empty:
         return None, df_portfolio_base
 
-    category_holdings = {cat: {"qty": 0.0, "invested": 0.0} for cat in df_portfolio_base["Category"].tolist()}
+    portfolio_cats = df_portfolio_base["Category"].tolist()
+    category_holdings = {cat.strip().upper(): {"cat_orig": cat, "qty": 0.0, "invested": 0.0} for cat in portfolio_cats}
     cash_flows = []
     dates = []
 
-    # Clean & sort trade dates
     df_raw = df_raw_trades.copy()
-    df_raw["Date_DT"] = pd.to_datetime(df_raw["Date"], errors="coerce")
-    df_raw = df_raw.dropna(subset=["Date_DT"]).sort_values("Date_DT")
+    if "Date" in df_raw.columns:
+        df_raw["Date_DT"] = pd.to_datetime(df_raw["Date"], errors="coerce")
+        df_raw = df_raw.dropna(subset=["Date_DT"]).sort_values("Date_DT")
 
     for _, row in df_raw.iterrows():
         sym = str(row.get("Symbol", "")).strip().upper()
@@ -178,11 +174,9 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
         price = float(row.get("Price", 0.0))
         trade_val = float(row.get("Value", qty * price))
 
-        # Filter out F&O / Commodities
         if not is_equity_or_etf(sym) or trade_val <= 0:
             continue
 
-        # Cash flows for XIRR
         if t_type == 'buy':
             cash_flows.append(-trade_val)
             dates.append(row["Date_DT"])
@@ -190,30 +184,33 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
             cash_flows.append(trade_val)
             dates.append(row["Date_DT"])
 
-        # Match symbol to dashboard category
-        matched_cat = None
+        matched_cat_upper = None
         for s_key, c_val in SYMBOL_MAP.items():
-            if s_key in sym:
-                matched_cat = c_val
+            if s_key.upper() in sym:
+                matched_cat_upper = c_val.upper()
                 break
 
-        if matched_cat in category_holdings:
-            if t_type == 'buy':
-                category_holdings[matched_cat]["qty"] += qty
-                category_holdings[matched_cat]["invested"] += trade_val
-            elif t_type == 'sell':
-                category_holdings[matched_cat]["qty"] = max(0.0, category_holdings[matched_cat]["qty"] - qty)
-                category_holdings[matched_cat]["invested"] = max(0.0, category_holdings[matched_cat]["invested"] - trade_val)
+        if not matched_cat_upper:
+            for cat_upper in category_holdings.keys():
+                if cat_upper in sym or sym in cat_upper:
+                    matched_cat_upper = cat_upper
+                    break
 
-    # Build updated portfolio DataFrame
+        if matched_cat_upper and matched_cat_upper in category_holdings:
+            if t_type == 'buy':
+                category_holdings[matched_cat_upper]["qty"] += qty
+                category_holdings[matched_cat_upper]["invested"] += trade_val
+            elif t_type == 'sell':
+                category_holdings[matched_cat_upper]["qty"] = max(0.0, category_holdings[matched_cat_upper]["qty"] - qty)
+                category_holdings[matched_cat_upper]["invested"] = max(0.0, category_holdings[matched_cat_upper]["invested"] - trade_val)
+
     updated_portfolio = df_portfolio_base.copy()
     for idx, row in updated_portfolio.iterrows():
-        cat = row["Category"]
-        if cat in category_holdings:
-            updated_portfolio.at[idx, "Units_Accumulated"] = category_holdings[cat]["qty"]
-            updated_portfolio.at[idx, "Invested_Value"] = category_holdings[cat]["invested"]
+        cat_upper = str(row["Category"]).strip().upper()
+        if cat_upper in category_holdings:
+            updated_portfolio.at[idx, "Units_Accumulated"] = category_holdings[cat_upper]["qty"]
+            updated_portfolio.at[idx, "Invested_Value"] = category_holdings[cat_upper]["invested"]
 
-    # Current terminal cash flow for XIRR
     temp_val = (updated_portfolio["Units_Accumulated"] * updated_portfolio["Current_LTP"]).sum()
 
     if cash_flows:
@@ -225,7 +222,6 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
 
     return computed_xirr, updated_portfolio
 
-# --- AMORTIZATION ENGINE ---
 def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = initial_loan
     total_principal_cleared = 0.0
@@ -267,37 +263,6 @@ def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = max(0.0, p_balance)
     return p_balance, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared
 
-def get_current_year_prepayment_status(df_loan):
-    if not df_loan.empty and "Date" in df_loan.columns:
-        df_temp = df_loan.copy()
-        df_temp["Date_DT"] = pd.to_datetime(df_temp["Date"], errors="coerce")
-        df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
-        
-        df_full = df_temp[df_temp["Payment_Type"].str.contains("Full EMI|Prepayment", na=False)]
-        
-        if not df_full.empty:
-            start_date = df_full.iloc[0]["Date_DT"]
-        else:
-            start_date = pd.to_datetime("2027-06-01")
-            
-        now = datetime.now()
-        if now < start_date:
-            return 0, False
-        
-        elapsed_months = (now.year - start_date.year) * 12 + (now.month - start_date.month)
-        current_year_num = max(1, (elapsed_months // 12) + 1)
-        year_start_date = start_date + pd.DateOffset(months=(current_year_num - 1) * 12)
-        
-        prepays_this_year_df = df_temp[
-            (df_temp["Payment_Type"].str.contains("Prepayment", na=False)) & 
-            (df_temp["Date_DT"] >= year_start_date)
-        ]
-        
-        has_4pct_prepay_this_year = prepays_this_year_df["Payment_Type"].str.contains("4% Corpus", na=False).any()
-        return current_year_num, has_4pct_prepay_this_year
-
-    return 0, False
-
 def project_ndz_target(current_principal, current_portfolio, current_rate, full_emi, is_handover, xirr_rate):
     if current_portfolio >= current_principal:
         return "Achieved", 0, 0
@@ -329,7 +294,6 @@ def project_ndz_target(current_principal, current_portfolio, current_rate, full_
     projected_date = sim_date + pd.DateOffset(months=months)
     return projected_date.strftime("%b %Y"), months // 12, months % 12
 
-# --- PARAMETERS & CONNECTION ---
 TICKERS = {
     "Next 50": "NEXT50.NS", 
     "NIFTY 50": "NIFTYBEES.NS", 
@@ -344,29 +308,29 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        df_loan = conn.read(worksheet="Loan_Tracker", ttl="10")
+        df_loan = conn.read(worksheet="Loan_Tracker", ttl=0)
     except Exception:
         df_loan = pd.DataFrame(columns=["Date", "Month_Year", "Expected_Payment", "Actual_Payment", "Payment_Type", "Confirmed", "Interest_Rate"])
         
     try:
-        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl="10")
+        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=0)
     except Exception:
         df_portfolio = pd.DataFrame(columns=["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"])
         
     try:
-        df_raw_trades = conn.read(worksheet="Raw_Trades", ttl="10")
+        df_raw_trades = conn.read(worksheet="Raw_Trades", ttl=0)
     except Exception:
         df_raw_trades = pd.DataFrame()
 
     try:
-        df_inv_log = conn.read(worksheet="Investment_Log", ttl="10")
+        df_inv_log = conn.read(worksheet="Investment_Log", ttl=0)
         if "Actual_SIP" not in df_inv_log.columns:
             df_inv_log["Actual_SIP"] = 0.0
     except Exception:
         df_inv_log = pd.DataFrame(columns=["Date", "Month_Year", "Actual_SIP", "Total_Invested", "Total_Value"])
 
     try:
-        df_settings = conn.read(worksheet="Loan_Settings", ttl="10")
+        df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
         if not df_settings.empty:
             disbursed_ratio = 0.90
             if "Disbursed_Ratio" in df_settings.columns and not pd.isna(df_settings.iloc[0]["Disbursed_Ratio"]):
@@ -395,7 +359,6 @@ def load_data():
 
 df_loan, df_portfolio, df_raw_trades, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate = load_data()
 
-# Update Portfolio Items with Live LTPs
 for idx, row in df_portfolio.iterrows():
     cat = row["Category"]
     if cat in TICKERS:
@@ -403,12 +366,10 @@ for idx, row in df_portfolio.iterrows():
         if fetched_ltp is not None and fetched_ltp > 0:
             df_portfolio.at[idx, "Current_LTP"] = fetched_ltp
 
-# Clean numeric fields & calculate portfolio metrics
 df_portfolio["Units_Accumulated"] = pd.to_numeric(df_portfolio["Units_Accumulated"], errors='coerce').fillna(0.0)
 df_portfolio["Current_LTP"] = pd.to_numeric(df_portfolio["Current_LTP"], errors='coerce').fillna(0.0)
 df_portfolio["Invested_Value"] = pd.to_numeric(df_portfolio["Invested_Value"], errors='coerce').fillna(0.0)
 
-# Process Raw_Trades tab if available
 computed_xirr, df_portfolio = process_raw_trades_tab(df_raw_trades, df_portfolio)
 
 for idx, row in df_portfolio.iterrows():
@@ -423,7 +384,6 @@ total_portfolio_invested = df_portfolio["Invested_Value"].sum()
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
-# --- DETERMINE ACTIVE XIRR RATE ---
 if computed_xirr is not None:
     calculated_xirr = computed_xirr
     xirr_source = "Auto-Synced Gmail Contract Notes"
@@ -431,20 +391,6 @@ else:
     calculated_xirr = 0.12
     xirr_source = "Default Baseline (12.0%)"
 
-current_month_str = datetime.now().strftime("%b %Y")
-
-if not df_inv_log.empty and "Month_Year" in df_inv_log.columns and "Total_Invested" in df_inv_log.columns:
-    prev_logs = df_inv_log[df_inv_log["Month_Year"] != current_month_str]
-    if not prev_logs.empty:
-        prior_invested = float(prev_logs["Total_Invested"].iloc[-1])
-    else:
-        prior_invested = float(df_inv_log["Total_Invested"].iloc[0])
-else:
-    prior_invested = 0.0
-
-derived_actual_sip = total_portfolio_invested - prior_invested
-
-# --- DERIVED LOAN CALCULATIONS via AMORTIZATION ENGINE ---
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
     df_loan, INITIAL_LOAN, current_interest_rate
 )
@@ -462,29 +408,22 @@ if is_handover:
     active_due_label = "Monthly EMI Due"
     active_due_amount = full_emi
     disbursement_badge = "100% Disbursed (Handover Complete)"
-    expected_sip = max(0.0, 60000.0 - full_emi)
 else:
     active_due_label = "Pre-EMI Due"
     active_due_amount = monthly_pre_emi
     disbursement_badge = f"{int(disbursed_ratio * 100)}% Disbursed"
-    expected_sip = 0.0
 
 current_rem_months = calc_rem_months(current_principal, full_emi, r_monthly)
 rem_years = current_rem_months / 12
 
-min_prepayment_allowed = 2 * full_emi
-corpus_4_pct = 0.04 * total_portfolio_val
 is_ndz_achieved = total_portfolio_val >= current_principal
 
-# Run Forward NDZ Projection
 proj_date, proj_yrs, proj_mos = project_ndz_target(
     current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, xirr_rate=calculated_xirr
 )
 
-# --- DASHBOARD HEADER ---
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
-# --- NET-DEBT-ZERO & OVERALL SUMMARY CARD ---
 with st.container(border=True):
     st.subheader("🎯 Net-Debt-Zero Visualizer")
     net_debt = current_principal - total_portfolio_val
@@ -515,7 +454,6 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 1: MONTHLY EMI LOGGING ---
 st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
 m_col1, m_col2, m_col3 = st.columns(3)
@@ -528,7 +466,6 @@ with m_col3:
 
 st.divider()
 
-# --- PART 2: LIVE PORTFOLIO HOLDINGS ---
 st.subheader("2. Live Portfolio Holdings & Capital Flow")
 
 active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
