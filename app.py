@@ -40,7 +40,25 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- HELPER: INDIAN CURRENCY FORMATTER ---
+# --- SAFE CONVERSION HELPERS ---
+def safe_float(val, default=0.0):
+    if isinstance(val, pd.Series):
+        val = val.iloc[0] if not val.empty else default
+    if pd.isna(val) or val is None:
+        return default
+    try:
+        clean_val = str(val).replace(',', '').replace('(', '').replace(')', '').strip()
+        return float(clean_val)
+    except (ValueError, TypeError):
+        return default
+
+def safe_str(val, default=""):
+    if isinstance(val, pd.Series):
+        val = val.iloc[0] if not val.empty else default
+    if pd.isna(val) or val is None:
+        return default
+    return str(val).strip()
+
 def format_inr(value):
     try:
         is_negative = value < 0
@@ -88,7 +106,6 @@ def is_equity_or_etf(symbol_str):
             return False
     return True
 
-# --- FETCH LIVE ETF / STOCK PRICES ---
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker, default_price=0.0):
     if not ticker: return default_price
@@ -112,7 +129,6 @@ def fetch_live_ltp(ticker, default_price=0.0):
         pass
     return default_price
 
-# --- FETCH LIVE MUTUAL FUND NAV VIA ISIN (MFAPI.IN) ---
 @st.cache_data(ttl=3600)
 def fetch_mf_nav_by_isin(isin, default_nav=0.0):
     if not isin or str(isin).strip().upper() in ["NAN", "NONE", ""]:
@@ -134,7 +150,6 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
         pass
     return default_nav
 
-# --- NEWTON-RAPHSON XIRR SOLVER ---
 def solve_xirr(cash_flows, dates, guess=0.12):
     try:
         if len(cash_flows) < 2 or sum(cash_flows) == 0: return 0.12
@@ -162,13 +177,15 @@ def solve_xirr(cash_flows, dates, guess=0.12):
     except Exception:
         return 0.12
 
-# --- PROCESS TRADEBOOK WITH ACCOUNT ID, SEGMENT & ISIN ---
+# --- PROCESS TRADEBOOK WITH COLUMN DEDUPLICATION & TYPE SAFETY ---
 def process_tradebook_tab(df_tradebook):
     if df_tradebook.empty:
         return None, pd.DataFrame(), pd.DataFrame()
 
     df_raw = df_tradebook.copy()
     df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
+    # Remove duplicate column names
+    df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
 
     sym_col = 'symbol' if 'symbol' in df_raw.columns else df_raw.columns[0]
     date_col = 'trade_date' if 'trade_date' in df_raw.columns else 'date'
@@ -193,15 +210,16 @@ def process_tradebook_tab(df_tradebook):
     dates = []
 
     for _, row in df_raw.iterrows():
-        sym = str(row.get(sym_col, "")).strip().upper()
-        t_type = str(row.get(type_col, "")).strip().lower()
-        qty = float(row.get(qty_col, 0.0))
-        price = float(row.get(price_col, 0.0))
+        sym = safe_str(row.get(sym_col, "")).upper()
+        t_type = safe_str(row.get(type_col, "")).lower()
+        qty = safe_float(row.get(qty_col, 0.0))
+        price = safe_float(row.get(price_col, 0.0))
         trade_val = qty * price
         
-        raw_seg = str(row.get(seg_col, "")).strip().upper() if seg_col else ""
-        isin_val = str(row.get(isin_col, "")).strip() if isin_col else ""
-        acc_val = str(row.get(acc_col, "SDB789")).strip().upper() if acc_col else "SDB789"
+        raw_seg = safe_str(row.get(seg_col, "")).upper() if seg_col else ""
+        isin_val = safe_str(row.get(isin_col, "")) if isin_col else ""
+        
+        acc_val = safe_str(row.get(acc_col, "SDB789")).upper() if acc_col else "SDB789"
         if acc_val in ["NAN", "NONE", ""]: acc_val = "SDB789"
 
         if raw_seg == 'MF' or any(kw in sym for kw in ['DIRECT', 'GROWTH', 'MUTUAL', 'FUND', 'OPTION']):
@@ -309,20 +327,25 @@ INITIAL_LOAN = 4890000.0
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    try: df_tradebook = conn.read(worksheet="Tradebook", ttl=0)
-    except Exception: df_tradebook = pd.DataFrame()
+    try: 
+        df_tradebook = conn.read(worksheet="Tradebook", ttl=0)
+        if not df_tradebook.empty:
+            df_tradebook.columns = [str(c).strip().lower() for c in df_tradebook.columns]
+            df_tradebook = df_tradebook.loc[:, ~df_tradebook.columns.duplicated()]
+    except Exception: 
+        df_tradebook = pd.DataFrame()
     return df_tradebook
 
 df_tradebook = load_data()
 
-# --- UPLOAD WIDGET & AUTOMATIC DEDUPLICATION ---
+# --- SIDEBAR IMPORTER ---
 with st.sidebar:
     st.header("⚙️ Tradebook Importer")
     uploaded_files = st.file_uploader(
         "Upload Zerodha Tradebook CSVs", 
         type=["csv"], 
         accept_multiple_files=True,
-        help="Upload tradebook-HEK312-MF.csv, tradebook-SDB789-EQ.csv, or monthly updates."
+        help="Upload tradebook-HEK312-MF.csv, tradebook-SDB789-EQ.csv, etc."
     )
 
     if uploaded_files:
@@ -330,15 +353,14 @@ with st.sidebar:
             new_records = []
             
             for file in uploaded_files:
-                # 1. Extract Account ID from Filename (e.g. HEK312 or SDB789)
                 match = re.search(r'\b([A-Z0-9]{6})\b', file.name.upper())
                 acc_id = match.group(1) if match else "SDB789"
                 
                 try:
                     df_uploaded = pd.read_csv(file)
                     df_uploaded.columns = [str(c).strip().lower() for c in df_uploaded.columns]
+                    df_uploaded = df_uploaded.loc[:, ~df_uploaded.columns.duplicated()]
                     
-                    # Add account column
                     df_uploaded['account'] = acc_id
                     new_records.append(df_uploaded)
                     st.info(f"Loaded {len(df_uploaded)} trades for **{acc_id}** from `{file.name}`")
@@ -347,15 +369,18 @@ with st.sidebar:
 
             if new_records:
                 df_new_combined = pd.concat(new_records, ignore_index=True)
+                df_new_combined.columns = [str(c).strip().lower() for c in df_new_combined.columns]
+                df_new_combined = df_new_combined.loc[:, ~df_new_combined.columns.duplicated()]
                 
-                # Merge existing Google Sheet trades with newly uploaded trades
                 df_existing = df_tradebook.copy()
                 if not df_existing.empty:
                     df_existing.columns = [str(c).strip().lower() for c in df_existing.columns]
+                    df_existing = df_existing.loc[:, ~df_existing.columns.duplicated()]
                 
                 df_all_merged = pd.concat([df_existing, df_new_combined], ignore_index=True)
+                df_all_merged.columns = [str(c).strip().lower() for c in df_all_merged.columns]
+                df_all_merged = df_all_merged.loc[:, ~df_all_merged.columns.duplicated()]
                 
-                # Deduplication Key Logic
                 sym_col = 'symbol' if 'symbol' in df_all_merged.columns else df_all_merged.columns[0]
                 date_col = 'trade_date' if 'trade_date' in df_all_merged.columns else 'date'
                 type_col = 'trade_type' if 'trade_type' in df_all_merged.columns else 'type'
@@ -373,11 +398,9 @@ with st.sidebar:
                     df_all_merged[trade_id_col].astype(str)
                 )
 
-                # Eliminate duplicates
                 df_deduped = df_all_merged.drop_duplicates(subset=["unique_key"]).drop(columns=["unique_key"]).reset_index(drop=True)
                 df_deduped = df_deduped.fillna("")
 
-                # Write to Google Sheets
                 try:
                     conn.update(worksheet="Tradebook", data=df_deduped)
                     st.success(f"🎉 Successfully synced! Total unique trades in sheet: {len(df_deduped)}")
@@ -400,7 +423,6 @@ overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfo
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
-# Summary Section
 with st.container(border=True):
     st.subheader("🎯 Net-Debt-Zero Visualizer")
     net_debt = max(0.0, INITIAL_LOAN - total_portfolio_val)
@@ -425,7 +447,6 @@ st.divider()
 
 st.subheader("2. Live Portfolio Holdings")
 
-# Section 2A: Equity & ETF Holdings
 st.markdown("#### 📊 Equity & ETF Holdings")
 if df_eq_active.empty:
     st.info("No active Equity/ETF holdings found in 'Tradebook' tab.")
@@ -450,7 +471,6 @@ else:
             m2.metric("Current Value", format_inr(curr))
             m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
-# Section 2B: Mutual Fund Holdings
 st.markdown("#### 💼 Mutual Fund Holdings")
 if df_mf_active.empty:
     st.info("No active Mutual Fund holdings found in 'Tradebook' tab.")
