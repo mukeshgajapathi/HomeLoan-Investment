@@ -153,61 +153,57 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None):
 
     # CASE A: Zerodha Console Excel Statement (.xlsx / .xls)
     if fname.endswith(('.XLSX', '.XLS')):
-        try:
-            xls = pd.ExcelFile(uploaded_file)
-            sheets = xls.sheet_names
-            sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
-            df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
-            
-            for r in range(min(15, len(df_raw))):
-                row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
-                if 'Client ID' in row_vals:
-                    idx = row_vals.index('Client ID')
-                    if idx + 1 < len(row_vals):
-                        client_id = row_vals[idx + 1].upper()
-                        
-            header_idx = -1
-            for r in range(len(df_raw)):
-                row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
-                if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
-                    header_idx = r
-                    break
+        xls = pd.ExcelFile(uploaded_file)
+        sheets = xls.sheet_names
+        sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
+        df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
+        
+        for r in range(min(15, len(df_raw))):
+            row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
+            if 'Client ID' in row_vals:
+                idx = row_vals.index('Client ID')
+                if idx + 1 < len(row_vals):
+                    client_id = row_vals[idx + 1].upper()
                     
-            if header_idx != -1:
-                headers = [safe_str(x) for x in df_raw.iloc[header_idx].values]
-                df_data = df_raw.iloc[header_idx+1:].copy()
-                df_data.columns = headers
+        header_idx = -1
+        for r in range(len(df_raw)):
+            row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
+            if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
+                header_idx = r
+                break
                 
-                for _, row in df_data.iterrows():
-                    sym = safe_str(row.get('Symbol', ''))
-                    if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
-                        continue
-                        
-                    qty = safe_float(row.get('Quantity Available', 0.0))
-                    avg_price = safe_float(row.get('Average Price', 0.0))
-                    ltp = safe_float(row.get('Previous Closing Price', 0.0))
-                    isin = safe_str(row.get('ISIN', ''))
-                    inst_type = safe_str(row.get('Instrument Type', ''))
+        if header_idx != -1:
+            headers = [safe_str(x) for x in df_raw.iloc[header_idx].values]
+            df_data = df_raw.iloc[header_idx+1:].copy()
+            df_data.columns = headers
+            
+            for _, row in df_data.iterrows():
+                sym = safe_str(row.get('Symbol', ''))
+                if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
+                    continue
                     
-                    asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
-                    clean_sym = sym.replace('-E', '').strip()
-                    
-                    if qty > 0:
-                        records.append({
-                            "Account": client_id,
-                            "Symbol": clean_sym,
-                            "ISIN": isin,
-                            "Asset_Class": asset_class,
-                            "Units_Accumulated": qty,
-                            "Avg_Cost": avg_price,
-                            "Current_LTP": ltp,
-                            "Invested_Value": round(qty * avg_price, 2),
-                            "Current_Value": round(qty * ltp, 2),
-                            "P&L (₹)": round(qty * (ltp - avg_price), 2)
-                        })
-        except ImportError:
-            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
-            return client_id, pd.DataFrame()
+                qty = safe_float(row.get('Quantity Available', 0.0))
+                avg_price = safe_float(row.get('Average Price', 0.0))
+                ltp = safe_float(row.get('Previous Closing Price', 0.0))
+                isin = safe_str(row.get('ISIN', ''))
+                inst_type = safe_str(row.get('Instrument Type', ''))
+                
+                asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
+                clean_sym = sym.replace('-E', '').strip()
+                
+                if qty > 0:
+                    records.append({
+                        "Account": client_id,
+                        "Symbol": clean_sym,
+                        "ISIN": isin,
+                        "Asset_Class": asset_class,
+                        "Units_Accumulated": qty,
+                        "Avg_Cost": avg_price,
+                        "Current_LTP": ltp,
+                        "Invested_Value": round(qty * avg_price, 2),
+                        "Current_Value": round(qty * ltp, 2),
+                        "P&L (₹)": round(qty * (ltp - avg_price), 2)
+                    })
 
     # CASE B: Zerodha Kite / Console Holdings CSV (.csv)
     elif fname.endswith('.CSV'):
@@ -903,6 +899,12 @@ else:
                 disabled=not enable_pp
             )
         logged_payment_type = "Prepayment (4% Corpus)"
+        
+        # Action Preview Calculation
+        principal_reduction = pp_amount if enable_pp else 0.0
+        new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
+        months_saved = max(0, round(current_rem_months - new_rem_months))
+        st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
 
     else: # Service Monthly EMI from Corpus
         enable_pp = True
@@ -916,11 +918,13 @@ else:
                 disabled=True
             )
         logged_payment_type = "Full EMI (Corpus Withdrawal)"
-
-    new_rem_months = calc_rem_months(current_principal - (pp_amount if enable_pp else 0.0), full_emi, r_monthly)
-    months_saved = max(0, current_rem_months - new_rem_months)
-
-    st.metric("Tenure Reduced By", f"{int(months_saved)} Months", f"~ {months_saved/12:.1f} Years saved")
+        
+        # Action Preview Calculation for Regular EMI
+        interest_portion = current_principal * r_monthly
+        principal_reduction = max(0.0, full_emi - interest_portion)
+        new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
+        months_saved = max(0, round(current_rem_months - new_rem_months))
+        st.metric("Tenure Progressed By", f"{months_saved} Month", "Standard 1-Month Amortization Cycle")
 
     if st.button("Execute Strategy Action & Log to Sheet", disabled=not enable_pp, type="primary"):
         new_row = pd.DataFrame([{
