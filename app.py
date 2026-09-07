@@ -249,7 +249,91 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None):
 
     return client_id, pd.DataFrame(records)
 
+# --- AMORTIZATION ENGINE ---
+def calc_rem_months(principal, emi, rate_monthly):
+    if principal <= 0: return 0
+    try:
+        val = 1 - (principal * rate_monthly / emi)
+        if val <= 0: return 9999 
+        return -math.log(val) / math.log(1 + rate_monthly)
+    except ValueError:
+        return 0
+
+def calculate_loan_state(df_loan, initial_loan, current_global_rate):
+    p_balance = initial_loan
+    total_principal_cleared = 0.0
+    emi_principal_cleared = 0.0
+    prepay_principal_cleared = 0.0
+    
+    if not df_loan.empty:
+        df_sorted = df_loan.copy()
+        df_sorted.columns = [str(c).strip().lower() for c in df_sorted.columns]
+        
+        if "date" in df_sorted.columns:
+            df_sorted["date_dt"] = pd.to_datetime(df_sorted["date"], errors="coerce")
+            df_sorted = df_sorted.dropna(subset=["date_dt"]).sort_values("date_dt")
+            
+        for _, row in df_sorted.iterrows():
+            p_type = safe_str(row.get("payment_type", ""))
+            actual_pay = safe_float(row.get("actual_payment", 0.0))
+            
+            row_rate = current_global_rate
+            if "interest_rate" in df_sorted.columns and not pd.isna(row.get("interest_rate")):
+                row_rate = safe_float(row.get("interest_rate"), current_global_rate)
+                    
+            r_monthly = (row_rate / 100) / 12
+            
+            if "pre-emi" in p_type.lower():
+                pass
+            elif "full emi" in p_type.lower() or "emi" in p_type.lower():
+                interest_portion = p_balance * r_monthly
+                principal_portion = max(0.0, actual_pay - interest_portion)
+                p_balance -= principal_portion
+                total_principal_cleared += principal_portion
+                emi_principal_cleared += principal_portion
+            elif "prepayment" in p_type.lower() or "part" in p_type.lower():
+                p_balance -= actual_pay
+                total_principal_cleared += actual_pay
+                prepay_principal_cleared += actual_pay
+                
+    p_balance = max(0.0, p_balance)
+    return p_balance, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared
+
+def project_ndz_target(current_principal, current_portfolio, current_rate, full_emi, is_handover, xirr_rate):
+    if current_portfolio >= current_principal:
+        return "Achieved", 0, 0
+        
+    p_bal = current_principal
+    port_val = current_portfolio
+    r_m_loan = (current_rate / 100) / 12
+    
+    # Growth rate
+    r_m_eq = (1 + (xirr_rate / 100))**(1/12) - 1 if (xirr_rate is not None and xirr_rate > -100) else 0.01
+
+    sim_date = datetime.now()
+    handover_date = datetime(2027, 6, 1)
+    months = 0
+    
+    while port_val < p_bal and months < 360:
+        months += 1
+        curr_sim_date = sim_date + pd.DateOffset(months=months)
+        
+        if curr_sim_date < handover_date and not is_handover:
+            monthly_sip = 0.0
+            loan_interest = p_bal * r_m_loan
+        else:
+            monthly_sip = max(0.0, 60000.0 - full_emi)
+            loan_interest = p_bal * r_m_loan
+            p_red = max(0.0, full_emi - loan_interest)
+            p_bal = max(0.0, p_bal - p_red)
+            
+        port_val = (port_val + monthly_sip) * (1 + r_m_eq)
+        
+    projected_date = sim_date + pd.DateOffset(months=months)
+    return projected_date.strftime("%b %Y"), months // 12, months % 12
+
 INITIAL_LOAN = 4890000.0
+LOAN_TENURE_YEARS = 30
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -262,19 +346,35 @@ def load_data():
     except Exception: 
         df_portfolio = pd.DataFrame()
 
-    console_xirr = None
+    try:
+        df_loan = conn.read(worksheet="Loan_Tracker", ttl=0)
+        if not df_loan.empty:
+            df_loan.columns = [str(c).strip().lower() for c in df_loan.columns]
+            df_loan = df_loan.loc[:, ~df_loan.columns.duplicated()]
+    except Exception:
+        df_loan = pd.DataFrame()
+
+    disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = 0.90, False, 7.20, None
     try:
         df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
-        if not df_settings.empty and "Console_XIRR" in df_settings.columns:
-            val = df_settings.iloc[0]["Console_XIRR"]
-            if pd.notna(val) and str(val).strip() != "":
-                console_xirr = safe_float(val, None)
+        if not df_settings.empty:
+            df_settings.columns = [str(c).strip().lower() for c in df_settings.columns]
+            if "disbursed_ratio" in df_settings.columns and not pd.isna(df_settings.iloc[0]["disbursed_ratio"]):
+                disbursed_ratio = safe_float(df_settings.iloc[0]["disbursed_ratio"], 0.90)
+            if "handover_completed" in df_settings.columns:
+                is_handover_completed = safe_str(df_settings.iloc[0]["handover_completed"]).upper() == "TRUE"
+            if "interest_rate" in df_settings.columns and not pd.isna(df_settings.iloc[0]["interest_rate"]):
+                current_interest_rate = safe_float(df_settings.iloc[0]["interest_rate"], 7.20)
+            if "console_xirr" in df_settings.columns:
+                val = df_settings.iloc[0]["console_xirr"]
+                if pd.notna(val) and str(val).strip() != "":
+                    console_xirr = safe_float(val, None)
     except Exception:
-        console_xirr = None
+        pass
 
-    return df_portfolio, console_xirr
+    return df_portfolio, df_loan, disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr
 
-df_portfolio_raw, console_xirr = load_data()
+df_portfolio_raw, df_loan, disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = load_data()
 
 # Process Holdings Data
 eq_rows = []
@@ -339,30 +439,82 @@ total_portfolio_invested = eq_inv + mf_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
+# Loan calculations
+current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
+    df_loan, INITIAL_LOAN, current_interest_rate
+)
+
+r_monthly = (current_interest_rate / 100) / 12
+n_months_base = LOAN_TENURE_YEARS * 12
+full_emi = INITIAL_LOAN * r_monthly * ((1 + r_monthly)**n_months_base) / (((1 + r_monthly)**n_months_base) - 1)
+
+disbursed_loan_amount = INITIAL_LOAN * disbursed_ratio
+monthly_pre_emi = (disbursed_loan_amount * (current_interest_rate / 100)) / 12
+
+is_handover = is_handover_completed or disbursed_ratio >= 1.0
+
+if is_handover:
+    active_due_label = "Monthly EMI Due"
+    active_due_amount = full_emi
+    disbursement_badge = "100% Disbursed (Handover Complete)"
+else:
+    active_due_label = "Pre-EMI Due"
+    active_due_amount = monthly_pre_emi
+    disbursement_badge = f"{int(disbursed_ratio * 100)}% Disbursed"
+
+current_rem_months = calc_rem_months(current_principal, full_emi, r_monthly)
+rem_years = current_rem_months / 12
+
+is_ndz_achieved = total_portfolio_val >= current_principal
+
+proj_date, proj_yrs, proj_mos = project_ndz_target(
+    current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, xirr_rate=console_xirr
+)
+
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
 # Summary Section
 with st.container(border=True):
     st.subheader("🎯 Net-Debt-Zero Visualizer")
-    net_debt = max(0.0, INITIAL_LOAN - total_portfolio_val)
-    nd_covered_pct = (total_portfolio_val / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 100.0
+    net_debt = max(0.0, current_principal - total_portfolio_val)
+    nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
     
     xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
 
     nd_col1, nd_col2 = st.columns([3, 1])
     with nd_col1:
-        st.progress(min(total_portfolio_val / INITIAL_LOAN, 1.0))
-        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active XIRR: {xirr_label}")
+        st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
+        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active Console XIRR: {xirr_label}")
     with nd_col2:
-        st.metric("Net Debt Pending", format_inr(net_debt))
+        if is_ndz_achieved:
+            st.success("🎉 Zero Debt Achieved!")
+        else:
+            st.metric("Net Debt Pending", format_inr(net_debt))
+
+    if not is_ndz_achieved:
+        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
 
     st.divider()
 
     s_col1, s_col2, s_col3, s_col4 = st.columns(4)
-    s_col1.metric("Initial Loan", format_inr(INITIAL_LOAN))
+    pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
+    s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
     s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
     s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
     s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
+
+st.divider()
+
+# --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
+st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
+
+m_col1, m_col2, m_col3 = st.columns(3)
+with m_col1:
+    st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
+with m_col2:
+    st.metric("Interest Rate", f"{current_interest_rate}%", "Floating Rate")
+with m_col3:
+    st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
 
 st.divider()
 
@@ -484,3 +636,22 @@ else:
             m1.metric("Invested", format_inr(inv))
             m2.metric("Current Value", format_inr(curr))
             m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+
+st.divider()
+
+# --- SECTION 3: PART PAYMENT & PREPAYMENT ENGINE ---
+st.subheader("3. Part Payment & Prepayment Engine")
+
+p_col1, p_col2, p_col3 = st.columns(3)
+with p_col1:
+    st.metric("Total Principal Cleared", format_inr(total_principal_cleared), f"↑ {pct_principal_cleared:.1f}% Cleared")
+with p_col2:
+    st.metric("Cleared via Regular EMIs", format_inr(emi_principal_cleared))
+with p_col3:
+    st.metric("Cleared via Part Payments", format_inr(prepay_principal_cleared))
+
+st.markdown("#### 📜 Historical Payment Tracker")
+if df_loan.empty:
+    st.info("No payment records logged in 'Loan_Tracker' tab.")
+else:
+    st.dataframe(df_loan, use_container_width=True, hide_index=True)
