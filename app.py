@@ -5,6 +5,7 @@ import math
 import urllib.request
 import json
 import re
+import io
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
@@ -47,7 +48,7 @@ def safe_float(val, default=0.0):
     if pd.isna(val) or val is None:
         return default
     try:
-        clean_val = str(val).replace(',', '').replace('(', '').replace(')', '').strip()
+        clean_val = str(val).replace(',', '').replace('(', '').replace(')', '').replace('%', '').strip()
         return float(clean_val)
     except (ValueError, TypeError):
         return default
@@ -139,51 +140,99 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
         pass
     return default_nav
 
-# --- PARSE CONSOLE HOLDINGS EXCEL ---
-def parse_zerodha_holdings_excel(uploaded_file):
-    xls = pd.ExcelFile(uploaded_file)
-    sheets = xls.sheet_names
+# --- DUAL HOLDINGS PARSER (KITE CSV & CONSOLE EXCEL) ---
+def parse_zerodha_holdings_file(uploaded_file):
+    fname = uploaded_file.name.upper()
+    match = re.search(r'\b([A-Z0-9]{6})\b', fname)
+    filename_acc_id = match.group(1) if match else "SDB789"
+    
     records = []
-    client_id = "SDB789"
-    
-    sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
-    df = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
-    
-    # 1. Extract Client ID
-    for r in range(min(15, len(df))):
-        row_vals = [safe_str(x) for x in df.iloc[r].dropna().values]
-        if 'Client ID' in row_vals:
-            idx = row_vals.index('Client ID')
-            if idx + 1 < len(row_vals):
-                client_id = row_vals[idx + 1].upper()
-                
-    # 2. Find table header row
-    header_idx = -1
-    for r in range(len(df)):
-        row_vals = [safe_str(x).upper() for x in df.iloc[r].dropna().values]
-        if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
-            header_idx = r
-            break
-            
-    if header_idx != -1:
-        headers = [safe_str(x) for x in df.iloc[header_idx].values]
-        df_data = df.iloc[header_idx+1:].copy()
-        df_data.columns = headers
+    client_id = filename_acc_id
+
+    # CASE A: Zerodha Console Excel Statement (.xlsx / .xls)
+    if fname.endswith(('.XLSX', '.XLS')):
+        xls = pd.ExcelFile(uploaded_file)
+        sheets = xls.sheet_names
+        sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
+        df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
         
-        for _, row in df_data.iterrows():
-            sym = safe_str(row.get('Symbol', ''))
-            if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
+        # 1. Extract Client ID from cells
+        for r in range(min(15, len(df_raw))):
+            row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
+            if 'Client ID' in row_vals:
+                idx = row_vals.index('Client ID')
+                if idx + 1 < len(row_vals):
+                    client_id = row_vals[idx + 1].upper()
+                    
+        # 2. Find table header row
+        header_idx = -1
+        for r in range(len(df_raw)):
+            row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
+            if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
+                header_idx = r
+                break
+                
+        if header_idx != -1:
+            headers = [safe_str(x) for x in df_raw.iloc[header_idx].values]
+            df_data = df_raw.iloc[header_idx+1:].copy()
+            df_data.columns = headers
+            
+            for _, row in df_data.iterrows():
+                sym = safe_str(row.get('Symbol', ''))
+                if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
+                    continue
+                    
+                qty = safe_float(row.get('Quantity Available', 0.0))
+                avg_price = safe_float(row.get('Average Price', 0.0))
+                ltp = safe_float(row.get('Previous Closing Price', 0.0))
+                isin = safe_str(row.get('ISIN', ''))
+                inst_type = safe_str(row.get('Instrument Type', ''))
+                
+                asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
+                clean_sym = sym.replace('-E', '').strip()
+                
+                if qty > 0:
+                    records.append({
+                        "Account": client_id,
+                        "Symbol": clean_sym,
+                        "ISIN": isin,
+                        "Asset_Class": asset_class,
+                        "Units_Accumulated": qty,
+                        "Avg_Cost": avg_price,
+                        "Current_LTP": ltp,
+                        "Invested_Value": round(qty * avg_price, 2),
+                        "Current_Value": round(qty * ltp, 2),
+                        "P&L (₹)": round(qty * (ltp - avg_price), 2)
+                    })
+
+    # CASE B: Zerodha Kite / Console Holdings CSV (.csv)
+    elif fname.endswith('.CSV'):
+        df = pd.read_csv(uploaded_file)
+        df.columns = [str(c).strip().replace('.', '').lower() for c in df.columns]
+        
+        sym_col = next((c for c in df.columns if 'instrument' in c or 'symbol' in c or 'tradingsymbol' in c), df.columns[0])
+        qty_col = next((c for c in df.columns if 'qty' in c or 'quantity' in c), None)
+        avg_col = next((c for c in df.columns if 'avg' in c or 'average' in c or 'cost' in c), None)
+        ltp_col = next((c for c in df.columns if 'ltp' in c or 'last' in c or 'price' in c or 'close' in c), None)
+        isin_col = next((c for c in df.columns if 'isin' in c), None)
+        
+        for _, row in df.iterrows():
+            sym = safe_str(row.get(sym_col, ''))
+            if not sym or sym.upper() == 'NAN' or 'TOTAL' in sym.upper() or 'SUMMARY' in sym.upper():
                 continue
                 
-            qty = safe_float(row.get('Quantity Available', 0.0))
-            avg_price = safe_float(row.get('Average Price', 0.0))
-            ltp = safe_float(row.get('Previous Closing Price', 0.0))
-            isin = safe_str(row.get('ISIN', ''))
-            inst_type = safe_str(row.get('Instrument Type', ''))
+            qty = safe_float(row.get(qty_col, 0.0)) if qty_col else 0.0
+            avg_price = safe_float(row.get(avg_col, 0.0)) if avg_col else 0.0
+            ltp = safe_float(row.get(ltp_col, 0.0)) if ltp_col else avg_price
+            isin = safe_str(row.get(isin_col, '')) if isin_col else ""
             
-            asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
             clean_sym = sym.replace('-E', '').strip()
             
+            if any(kw in clean_sym.upper() for kw in ['DIRECT', 'GROWTH', 'MUTUAL', 'FUND', 'LIQUID', 'MONEY MARKET']) or (isin and isin.startswith('INF') and not clean_sym.endswith('BEES') and 'ETF' not in clean_sym.upper()):
+                asset_class = "Mutual Fund"
+            else:
+                asset_class = "Equity / ETF"
+                
             if qty > 0:
                 records.append({
                     "Account": client_id,
@@ -197,7 +246,7 @@ def parse_zerodha_holdings_excel(uploaded_file):
                     "Current_Value": round(qty * ltp, 2),
                     "P&L (₹)": round(qty * (ltp - avg_price), 2)
                 })
-                
+
     return client_id, pd.DataFrame(records)
 
 INITIAL_LOAN = 4890000.0
@@ -213,20 +262,21 @@ def load_data():
     except Exception: 
         df_portfolio = pd.DataFrame()
 
+    console_xirr = None
     try:
         df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
-        user_xirr = 0.12
         if not df_settings.empty and "Console_XIRR" in df_settings.columns:
-            val = safe_float(df_settings.iloc[0]["Console_XIRR"], 0.12)
-            if val > 0: user_xirr = val / 100.0 if val > 1 else val
+            val = df_settings.iloc[0]["Console_XIRR"]
+            if pd.notna(val) and str(val).strip() != "":
+                console_xirr = safe_float(val, None)
     except Exception:
-        user_xirr = 0.12
+        console_xirr = None
 
-    return df_portfolio, user_xirr
+    return df_portfolio, console_xirr
 
 df_portfolio_raw, console_xirr = load_data()
 
-# Process Portfolio Data from Sheet
+# Process Holdings Data
 eq_rows = []
 mf_rows = []
 
@@ -297,10 +347,12 @@ with st.container(border=True):
     net_debt = max(0.0, INITIAL_LOAN - total_portfolio_val)
     nd_covered_pct = (total_portfolio_val / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 100.0
     
+    xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
+
     nd_col1, nd_col2 = st.columns([3, 1])
     with nd_col1:
         st.progress(min(total_portfolio_val / INITIAL_LOAN, 1.0))
-        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active XIRR: **{console_xirr*100:.2f}%**")
+        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active XIRR: {xirr_label}")
     with nd_col2:
         st.metric("Net Debt Pending", format_inr(net_debt))
 
@@ -321,35 +373,39 @@ with sec2_hdr_col:
     st.subheader("2. Live Portfolio Holdings")
 
 with sec2_act_col:
-    with st.popover("📥 Import Holdings Excel", use_container_width=True):
-        st.markdown("**Import Zerodha Console Statement**")
+    with st.popover("📥 Import Holdings File(s)", use_container_width=True):
+        st.markdown("**Import Zerodha Holdings (CSV or Excel)**")
         
         uploaded_files = st.file_uploader(
-            "Select Holdings Excel File(s)", 
-            type=["xlsx", "xls"], 
+            "Select Holdings File(s)", 
+            type=["csv", "xlsx", "xls"], 
             accept_multiple_files=True,
-            key="holdings_excel_uploader",
-            help="Upload holdings-SDB789.xlsx or holdings-HEK312.xlsx exported from Zerodha Console."
+            key="holdings_uploader",
+            help="Upload Kite CSVs (holdings-HEK312.csv) or Console Excel statements (holdings-SDB789.xlsx)."
         )
 
         input_xirr = st.number_input(
             "Console Overall XIRR (%)", 
-            min_value=0.0, 
-            max_value=100.0, 
-            value=float(console_xirr * 100), 
+            value=None,
+            min_value=-100.0, 
+            max_value=500.0, 
             step=0.1,
-            help="Enter overall portfolio XIRR % shown on Zerodha Console dashboard."
+            placeholder="e.g. 14.5 or -2.5 (Mandatory)",
+            help="Enter overall portfolio XIRR % from Zerodha Console. Negative, zero, and positive values are allowed."
         )
 
-        if uploaded_files:
-            if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings", use_container_width=True):
+        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings", use_container_width=True):
+            if input_xirr is None:
+                st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
+            elif not uploaded_files:
+                st.error("⚠️ Please select at least one holdings CSV or Excel file to upload.")
+            else:
                 parsed_records = []
-                
                 for file in uploaded_files:
-                    cid, df_parsed = parse_zerodha_holdings_excel(file)
+                    cid, df_parsed = parse_zerodha_holdings_file(file)
                     if not df_parsed.empty:
                         parsed_records.append(df_parsed)
-                        st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}**")
+                        st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}** from `{file.name}`")
 
                 if parsed_records:
                     df_new_holdings = pd.concat(parsed_records, ignore_index=True)
