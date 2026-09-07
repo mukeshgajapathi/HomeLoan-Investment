@@ -510,7 +510,45 @@ proj_date, proj_yrs, proj_mos = project_ndz_target(
     current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, xirr_rate=console_xirr
 )
 
-st.title("🏡 Home Loan & 📈 Investment Tracker")
+# --- HEADER & MANIFESTATION ENGINE TOGGLE ---
+title_col, manifest_col = st.columns([3, 2])
+
+with title_col:
+    st.title("🏡 Home Loan & 📈 Investment Tracker")
+
+with manifest_col:
+    st.write("")
+    is_manifest_mode = st.toggle(
+        "✨ **Manifest Net-Debt-Zero (Dec 2035)**",
+        value=False,
+        help="Visualize reaching ₹1 Crore corpus & ₹0 debt by December 2035 without altering live sheets data."
+    )
+
+# --- OVERRIDE LOGIC FOR MANIFESTATION / VISUALIZATION MODE ---
+if is_manifest_mode:
+    total_portfolio_val = 10000000.0  # ₹1 Crore Target Corpus
+    total_portfolio_invested = 5000000.0
+    overall_pnl = 5000000.0
+    overall_pnl_pct = 100.0
+    
+    current_principal = 0.0
+    total_principal_cleared = INITIAL_LOAN
+    emi_principal_cleared = INITIAL_LOAN * 0.65
+    prepay_principal_cleared = INITIAL_LOAN * 0.35
+    
+    current_rem_months = 0
+    rem_years = 0.0
+    is_ndz_achieved = True
+    proj_date = "Dec 2035"
+    proj_yrs = 0
+    proj_mos = 0
+    console_xirr = 15.0 if console_xirr is None else console_xirr
+
+    st.success(
+        "🙏 **December 2035 Manifestation Anchored:**\n"
+        "I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown to **₹1,00,00,000 (₹1 Crore)** "
+        "and my home loan balance is completely **₹0**. My home is 100% mine, generating effortless financial peace and security."
+    )
 
 # Summary Section
 with st.container(border=True):
@@ -631,7 +669,7 @@ with st.form("emi_form", clear_on_submit=True):
         else:
             st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
 
-    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
+    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid or is_manifest_mode):
         new_row = pd.DataFrame([{
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
             "Month_Year": current_month_str, 
@@ -721,7 +759,7 @@ with sec2_act_col:
             help="Enter overall portfolio XIRR % from Zerodha Console. Negative, zero, and positive values are allowed."
         )
 
-        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings"):
+        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings", disabled=is_manifest_mode):
             missing_accounts = [fname for fname, acc in account_mapping.items() if not acc]
             if input_xirr is None:
                 st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
@@ -900,7 +938,7 @@ else:
     pp_input_col1, pp_input_col2 = st.columns(2)
 
     if "4% Portfolio Corpus" in prepay_strategy_type:
-        enable_pp = is_xirr_valid and is_corpus_sufficient and (not has_4pct_executed)
+        enable_pp = is_xirr_valid and is_corpus_sufficient and (not has_4pct_executed) and (not is_manifest_mode)
         
         with pp_input_col1:
             st.info(f"Active Console XIRR: **{console_xirr:.2f}%**" if console_xirr is not None else "Active Console XIRR: Not set")
@@ -925,7 +963,7 @@ else:
         st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
 
     else: # Service Monthly EMI from Corpus
-        enable_pp = True
+        enable_pp = not is_manifest_mode
         with pp_input_col1:
             st.info(f"Monthly EMI of **{format_inr(full_emi)}** will be withdrawn from portfolio corpus.")
             
