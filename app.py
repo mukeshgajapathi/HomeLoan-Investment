@@ -199,11 +199,9 @@ def project_ndz_target(current_principal, current_portfolio, current_rate, full_
         months += 1
         curr_sim_date = sim_date + pd.DateOffset(months=months)
         
-        # Determine SIP amount: ₹0 until June 2027 handover (saving for interior), ₹26,807 post-handover
         if curr_sim_date < handover_date and not is_handover:
             monthly_sip = 0.0
             loan_interest = p_bal * r_m_loan
-            # Pre-EMI phase: interest paid, principal stays flat
         else:
             monthly_sip = max(0.0, 60000.0 - full_emi)
             loan_interest = p_bal * r_m_loan
@@ -301,6 +299,21 @@ total_portfolio_invested = df_portfolio["Invested_Value"].sum()
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
+# --- DERIVED PRIOR INVESTED BASELINE FOR SIP / SWP CALCULATION ---
+current_month_str = datetime.now().strftime("%b %Y")
+
+if not df_inv_log.empty and "Month_Year" in df_inv_log.columns and "Total_Invested" in df_inv_log.columns:
+    prev_logs = df_inv_log[df_inv_log["Month_Year"] != current_month_str]
+    if not prev_logs.empty:
+        prior_invested = float(prev_logs["Total_Invested"].iloc[-1])
+    else:
+        prior_invested = float(df_inv_log["Total_Invested"].iloc[0])
+else:
+    prior_invested = 0.0
+
+# Automatically calculated Actual SIP / SWP Delta
+derived_actual_sip = total_portfolio_invested - prior_invested
+
 # --- DERIVED LOAN CALCULATIONS via AMORTIZATION ENGINE ---
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
     df_loan, INITIAL_LOAN, current_interest_rate
@@ -372,8 +385,8 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 1: MONTHLY EMI & EQUITY SIP TRACKER ---
-st.subheader(f"1. Standard Monthly Payments & SIP Allocation Tracker")
+# --- PART 1: MONTHLY EMI LOGGING ---
+st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
 m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
@@ -432,20 +445,11 @@ with m_col2:
 with m_col3:
     st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
 
-current_month_str = datetime.now().strftime("%b %Y")
-
 if not df_loan.empty and "Month_Year" in df_loan.columns:
     emi_records = df_loan[df_loan["Payment_Type"].isin(["Pre-EMI", "Full EMI"])]
     is_current_month_paid = current_month_str in emi_records["Month_Year"].values
 else:
     is_current_month_paid = False
-
-# Fetch Actual SIP logged for current month from Investment_Log
-if not df_inv_log.empty and "Month_Year" in df_inv_log.columns and "Actual_SIP" in df_inv_log.columns:
-    current_sip_log = df_inv_log[df_inv_log["Month_Year"] == current_month_str]
-    actual_sip_logged = float(current_sip_log["Actual_SIP"].iloc[-1]) if not current_sip_log.empty else 0.0
-else:
-    actual_sip_logged = 0.0
 
 with st.form("emi_form", clear_on_submit=True):
     c1, c2, c3 = st.columns(3)
@@ -476,48 +480,8 @@ with st.form("emi_form", clear_on_submit=True):
         st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
         st.rerun()
 
-# --- EQUITY SIP ALLOCATION TRACKER CARD ---
-with st.container(border=True):
-    st.markdown(f"### 📈 Equity SIP Allocation Tracker ({current_month_str})")
-    
-    sip_c1, sip_c2, sip_c3 = st.columns(3)
-    sip_c1.metric("Expected Monthly SIP", format_inr(expected_sip), "Paused for Interior" if not is_handover else "₹60k - Full EMI")
-    sip_c2.metric("Actual SIP Logged", format_inr(actual_sip_logged))
-    
-    with sip_c3:
-        st.markdown("**SIP Status**")
-        if not is_handover:
-            st.markdown("<span style='color:#808495; font-weight:bold; font-size:18px;'>⏳ PAUSED (Interior Works Accumulation)</span>", unsafe_allow_html=True)
-        elif actual_sip_logged >= expected_sip:
-            st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 TARGET MET</span>", unsafe_allow_html=True)
-        else:
-            deficit = expected_sip - actual_sip_logged
-            st.markdown(f"<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 DEFICIT ({format_inr(deficit)})</span>", unsafe_allow_html=True)
-
-    with st.popover("✏️ Log / Update Current Month Actual SIP", width="stretch"):
-        st.markdown("### 💸 Log Actual Equity SIP")
-        user_actual_sip = st.number_input("Actual Equity SIP Invested This Month (₹)", min_value=0.0, value=float(actual_sip_logged), step=1000.0)
-        
-        if st.button("💾 Save Actual SIP Entry", type="primary", width="stretch"):
-            # Update or append Actual SIP entry in Investment_Log
-            if not df_inv_log.empty and current_month_str in df_inv_log["Month_Year"].values:
-                idx = df_inv_log[df_inv_log["Month_Year"] == current_month_str].index[-1]
-                df_inv_log.at[idx, "Actual_SIP"] = user_actual_sip
-                df_inv_log.at[idx, "Date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                updated_inv_log = df_inv_log
-            else:
-                new_sip_row = pd.DataFrame([{
-                    "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "Month_Year": current_month_str,
-                    "Actual_SIP": user_actual_sip,
-                    "Total_Invested": total_portfolio_invested,
-                    "Total_Value": total_portfolio_val
-                }])
-                updated_inv_log = pd.concat([df_inv_log, new_sip_row], ignore_index=True)
-                
-            conn.update(worksheet="Investment_Log", data=updated_inv_log)
-            st.success(f"Logged Actual SIP of {format_inr(user_actual_sip)} for {current_month_str}!")
-            st.rerun()
+if is_current_month_paid:
+    st.info(f"✅ Loan payment for **{current_month_str}** is logged. Duplicate entries blocked.")
 
 # --- PRINCIPAL CLEARED VISUALIZER CARD ---
 with st.container(border=True):
@@ -532,15 +496,15 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 2: PORTFOLIO HOLDINGS (BULK EDIT DATA TABLE) ---
+# --- PART 2: LIVE PORTFOLIO HOLDINGS & DYNAMIC SIP / SWP TRACKER ---
 sec2_col1, sec2_col2 = st.columns([3, 1])
 
 with sec2_col1:
-    st.subheader("2. Live Portfolio Holdings")
+    st.subheader("2. Live Portfolio Holdings & Capital Flow")
 with sec2_col2:
     with st.popover("✏️ Edit Holdings", width="stretch"):
         st.markdown("### 📊 Update Asset Holdings")
-        st.caption("Update Qty and Invested Amount for all holdings below and save all at once:")
+        st.caption("Editing Qty & Invested Amount dynamically calculates your monthly SIP / SWP:")
         
         editor_df = df_portfolio[["Category", "Units_Accumulated", "Invested_Value"]].copy()
         
@@ -568,13 +532,16 @@ with sec2_col2:
             new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
             new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
 
+            # Auto-calculate dynamic SIP / SWP delta against prior baseline
+            new_derived_sip = round(new_total_inv - prior_invested, 2)
+
             df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
             conn.update(worksheet="Portfolio_Tracker", data=df_to_save)
             
             snapshot_row = pd.DataFrame([{
                 "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "Month_Year": datetime.now().strftime("%b %Y"),
-                "Actual_SIP": actual_sip_logged,
+                "Month_Year": current_month_str,
+                "Actual_SIP": new_derived_sip,
                 "Total_Invested": new_total_inv,
                 "Total_Value": new_total_val
             }])
@@ -582,9 +549,45 @@ with sec2_col2:
             updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
             conn.update(worksheet="Investment_Log", data=updated_inv_log)
             
-            st.success("All portfolio holdings updated successfully!")
+            st.success(f"Holdings updated! Auto-calculated monthly flow: {format_inr(new_derived_sip)}")
             st.rerun()
 
+# --- INTEGRATED DYNAMIC EQUITY SIP / SWP TRACKER CARD ---
+with st.container(border=True):
+    if not is_ndz_achieved:
+        st.markdown(f"### 📈 Equity SIP Allocation Tracker ({current_month_str})")
+        
+        sip_c1, sip_c2, sip_c3 = st.columns(3)
+        sip_c1.metric("Expected Monthly SIP", format_inr(expected_sip), "Paused for Interior" if not is_handover else "₹60k - Full EMI")
+        sip_c2.metric("Actual Monthly SIP (Calculated)", format_inr(derived_actual_sip), "Auto-derived from Holdings")
+        
+        with sip_c3:
+            st.markdown("**SIP Status**")
+            if not is_handover:
+                st.markdown("<span style='color:#808495; font-weight:bold; font-size:18px;'>⏳ PAUSED (Interior Works Accumulation)</span>", unsafe_allow_html=True)
+            elif derived_actual_sip >= expected_sip:
+                st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 TARGET MET</span>", unsafe_allow_html=True)
+            else:
+                deficit = expected_sip - derived_actual_sip
+                st.markdown(f"<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 DEFICIT ({format_inr(deficit)})</span>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"### 🔄 Equity SWP & Corpus Flow Tracker ({current_month_str})")
+        
+        swp_c1, swp_c2, swp_c3 = st.columns(3)
+        swp_c1.metric("Salary EMI Status", "OFFLOADED", "Zero Salary Contribution")
+        
+        if derived_actual_sip < 0:
+            swp_c2.metric("Monthly SWP Executed", format_inr(abs(derived_actual_sip)), "Capital Withdrawn for Debt")
+            with swp_c3:
+                st.markdown("**Corpus Flow Status**")
+                st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 SWP ACTIVE (Servicing Debt)</span>", unsafe_allow_html=True)
+        else:
+            swp_c2.metric("Monthly Net Addition", format_inr(derived_actual_sip), "Corpus Reinvested")
+            with swp_c3:
+                st.markdown("**Corpus Flow Status**")
+                st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 CORPUS COMPOUNDING</span>", unsafe_allow_html=True)
+
+# READONLY CARDS VIEW
 active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
 
 if active_holdings.empty:
@@ -629,7 +632,7 @@ else:
     
     with st.container(border=True):
         st.markdown("### 🚦 4% Portfolio Corpus Rule Conditions")
-        st.caption("ℹ️ **Annual Limit:** Allowed strictly **1 time per loan year**, provided Zerodha Console XIRR > 10.0%.")
+        st.caption("抓 **Annual Limit:** Tapping the portfolio corpus under this rule is strictly limited to **1 time per loan year**, provided Zerodha Console XIRR > 10.0%.")
         
         rule_col1, rule_col2, rule_col3 = st.columns(3)
         rule_col1.metric("4% Corpus Allocation", format_inr(corpus_4_pct))
