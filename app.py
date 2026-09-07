@@ -6,6 +6,7 @@ import urllib.request
 import json
 import re
 import io
+import random
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
@@ -527,14 +528,8 @@ with manifest_col:
 # --- OVERRIDE LOGIC FOR MANIFESTATION / VISUALIZATION MODE ---
 if is_manifest_mode:
     total_portfolio_val = 10000000.0  # ₹1 Crore Target Corpus
-    total_portfolio_invested = 5000000.0
-    overall_pnl = 5000000.0
-    overall_pnl_pct = 100.0
-    
     current_principal = 0.0
     total_principal_cleared = INITIAL_LOAN
-    emi_principal_cleared = INITIAL_LOAN * 0.65
-    prepay_principal_cleared = INITIAL_LOAN * 0.35
     
     current_rem_months = 0
     rem_years = 0.0
@@ -542,7 +537,7 @@ if is_manifest_mode:
     proj_date = "Dec 2035"
     proj_yrs = 0
     proj_mos = 0
-    console_xirr = 13.6  # Fixed at 13.6% XIRR for Dec 2035 Manifestation Screen
+    console_xirr = 13.6
 
     st.success(
         "🙏 **Goal:** I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown "
@@ -574,25 +569,48 @@ with st.container(border=True):
 
     st.divider()
 
-    s_col1, s_col2, s_col3, s_col4 = st.columns(4)
     pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
-    s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
-    s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
-    s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
-    s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
+    
+    if is_manifest_mode:
+        s_col1, s_col2 = st.columns(2)
+        s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
+        s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
+    else:
+        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
+        s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
+        s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
+        s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
 
-# --- ABRAHAM HICKS VIBRATIONAL AFFIRMATIONS CARD & MANIFESTATION ISOLATION ---
+# --- AFFIRMATIONS & MANIFESTATION ISOLATION ---
 if is_manifest_mode:
     st.divider()
+    
+    abraham_quotes = [
+        "Everything is always working out for me.",
+        "The entire universe is conspiring to give me everything that I want.",
+        "When I'm feeling good, I'm allowing in good.",
+        "Anything I can imagine being, doing, or having, I can be, do, or have.",
+        "I am the creator of my own reality."
+    ]
+    random_abraham_quote = random.choice(abraham_quotes)
+
     with st.container(border=True):
-        st.markdown("### ✨ Abraham Hicks Vibrational Money Affirmations")
+        st.markdown("### ✨ Abraham Hicks Vibrational Affirmation")
+        st.info(f"💫 **“{random_abraham_quote}”**")
+        
+        st.divider()
+        
+        st.markdown("### 📜 Napoleon Hill's Self-Confidence Formula")
         st.markdown(
-            "💫 *“Money flows to me easily, frequently, and abundantly. The Universe is constantly yielding wealth to me as I relax and allow.”*\n\n"
-            "💫 *“Everything is working out for me. Freedom, ease, and financial security are my natural state of being.”*\n\n"
-            "💫 *“My home is 100% mine, fully backed by an overflowing portfolio corpus. I am in complete vibrational alignment with financial independence.”*\n\n"
-            "💫 *“I love knowing that abundance is consistent, effortless, and always finding its way to me.”*"
+            "1. **Definite Purpose:** I know that I have the ability to achieve the object of my definite purpose in life; therefore, I demand of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.\n\n"
+            "2. **Dominating Thoughts:** I realize the dominating thoughts of my mind will eventually reproduce themselves in outward, physical action, and gradually transform themselves into physical reality; therefore, I will concentrate my thought, for thirty minutes daily, upon the task of thinking of the person I intend to become, thereby creating in my mind a clear mental picture.\n\n"
+            "3. **Autosuggestion:** I know through the principle of autosuggestion, any desire that I persistently hold in my mind will eventually seek expression through some practical means of attaining the object back of it; therefore, I will devote ten minutes daily to demanding of myself the development of self-confidence.\n\n"
+            "4. **Chief Aim:** I have clearly written down a description of my definite chief aim in life, and I will never stop trying, until I shall have developed sufficient self-confidence for its attainment.\n\n"
+            "5. **Truth, Justice & Faith:** I fully realize that no wealth or position can long endure, unless built upon truth and justice; therefore, I will engage in no transaction that does not benefit all whom it affects. I will succeed by attracting to myself the forces I wish to use, and the cooperation of other people. I will induce others to serve me, because of my willingness to serve others. I will eliminate hatred, envy, jealousy, selfishness, and cynicism, by developing love for all humanity, because I know that a negative attitude toward others can never bring me success. I will cause others to believe in me, because I will believe in them, and in myself. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full faith that it will gradually influence my thoughts and actions so that I will become a self-reliant, and successful, person."
         )
-    # Stop execution here so only this card and visualizer are rendered
+
+    # Stop execution here so only the Visualizer card and Affirmations render
     st.stop()
 
 st.divider()
