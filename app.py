@@ -4,6 +4,7 @@ import yfinance as yf
 import math
 import urllib.request
 import json
+import re
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
@@ -55,20 +56,23 @@ def format_inr(value):
     except ValueError:
         return "₹0"
 
-# Strict ETF Symbol Mapping
 EXACT_ETF_MAP = {
     "NIFTYBEES": "NIFTY 50",
     "HDFCNIFETF": "NIFTY 50",
     "JUNIORBEES": "Next 50",
     "NEXT50": "Next 50",
     "GOLDBEES": "GOLD",
-    "LIQUIDBEES": "Liquid"
+    "LIQUIDBEES": "Liquid",
+    "LIQUIDCASE": "Liquid"
 }
 
-EXCLUDE_KEYWORDS = ["FUT", "CE", "PE", "MCX", "GOLDPETAL", "GOLDGUINEA", "CRUDEOIL"]
+EXCLUDE_KEYWORDS = ["FUT", "CE", "PE", "MCX", "GOLDPETAL", "GOLDGUINEA", "CRUDEOIL", "CALL", "PUT", "OPT", "FUTURES"]
 
 def is_equity_or_etf(symbol_str):
     sym = str(symbol_str).upper()
+    # Exclude option codes like 24OCT26000CE or 26APR22000PE
+    if re.search(r'\b\d{2}[A-Z]{3}\b', sym) or re.search(r'\d+(CE|PE)\b', sym):
+        return False
     for kw in EXCLUDE_KEYWORDS:
         if kw in sym:
             return False
@@ -175,7 +179,6 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
             cash_flows.append(trade_val)
             dates.append(row["Date_DT"])
 
-        # Strict ETF vs Mutual Fund Segregation
         matched_etf_cat = None
         for etf_key, cat_name in EXACT_ETF_MAP.items():
             if etf_key in sym:
@@ -190,7 +193,6 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
                 etf_categories[matched_etf_cat]["qty"] = max(0.0, etf_categories[matched_etf_cat]["qty"] - qty)
                 etf_categories[matched_etf_cat]["invested"] = max(0.0, etf_categories[matched_etf_cat]["invested"] - trade_val)
         else:
-            # Mutual Fund Holding
             mf_key = sym.split('-')[0].strip()
             if mf_key not in mf_holdings:
                 mf_holdings[mf_key] = {"qty": 0.0, "invested": 0.0, "last_price": price}
@@ -203,13 +205,16 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
                 mf_holdings[mf_key]["invested"] = max(0.0, mf_holdings[mf_key]["invested"] - trade_val)
 
     updated_portfolio = df_portfolio_base.copy()
+    # Reset accumulated units and invested values before accumulating from scratch
+    updated_portfolio["Units_Accumulated"] = 0.0
+    updated_portfolio["Invested_Value"] = 0.0
+
     for idx, row in updated_portfolio.iterrows():
         cat = row["Category"]
         if cat in etf_categories:
             updated_portfolio.at[idx, "Units_Accumulated"] = etf_categories[cat]["qty"]
             updated_portfolio.at[idx, "Invested_Value"] = etf_categories[cat]["invested"]
 
-    # Mutual Fund Portfolio Construction
     mf_rows = []
     for mf_name, data in mf_holdings.items():
         if data["invested"] > 0 and data["qty"] > 0:
@@ -284,7 +289,6 @@ computed_xirr, df_portfolio, df_mf_portfolio = process_raw_trades_tab(df_raw_tra
 df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
 df_portfolio["P&L (₹)"] = df_portfolio["Current_Value"] - df_portfolio["Invested_Value"]
 
-# Combined Totals
 etf_val = df_portfolio["Current_Value"].sum()
 etf_inv = df_portfolio["Invested_Value"].sum()
 mf_val = df_mf_portfolio["Current_Value"].sum() if not df_mf_portfolio.empty else 0.0
@@ -321,7 +325,6 @@ st.divider()
 
 st.subheader("2. Live Portfolio Holdings")
 
-# Render ETFs
 st.markdown("#### 📊 ETF Holdings")
 active_etfs = df_portfolio[df_portfolio["Invested_Value"] > 0]
 if active_etfs.empty:
@@ -343,7 +346,6 @@ else:
             m2.metric("Current Value", format_inr(curr))
             m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
-# Render Mutual Funds
 if not df_mf_portfolio.empty:
     st.markdown("#### 💼 Mutual Fund Holdings")
     for _, row in df_mf_portfolio.iterrows():
