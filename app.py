@@ -145,7 +145,6 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
     file_name_str = filename if filename else getattr(uploaded_file, 'name', str(uploaded_file))
     fname = file_name_str.upper()
     
-    # Priority: 1. Manual user override -> 2. Filename match -> 3. Sheet cell
     client_id = override_account_id.strip().upper() if (override_account_id and override_account_id.strip()) else None
 
     if not client_id:
@@ -394,14 +393,6 @@ def load_data():
     except Exception:
         df_loan = pd.DataFrame()
 
-    try:
-        df_inv_log = conn.read(worksheet="Investment_Log", ttl=0)
-        if not df_inv_log.empty:
-            df_inv_log.columns = [str(c).strip().lower() for c in df_inv_log.columns]
-            df_inv_log = df_inv_log.loc[:, ~df_inv_log.columns.duplicated()]
-    except Exception:
-        df_inv_log = pd.DataFrame()
-
     disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = 0.90, False, 7.20, None
     try:
         df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
@@ -420,9 +411,9 @@ def load_data():
     except Exception:
         pass
 
-    return df_portfolio, df_loan, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr
+    return df_portfolio, df_loan, disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr
 
-df_portfolio_raw, df_loan, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = load_data()
+df_portfolio_raw, df_loan, disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = load_data()
 
 # Process Holdings Data
 eq_rows = []
@@ -696,7 +687,6 @@ with sec2_act_col:
                 match = re.search(r'\b([A-Z0-9]{6})\b', file.name.upper())
                 detected_acc = match.group(1) if match else ""
                 
-                # Peek into Excel header if no filename match
                 if not detected_acc and file.name.upper().endswith(('.XLSX', '.XLS')):
                     try:
                         xls = pd.ExcelFile(file)
@@ -787,20 +777,6 @@ with sec2_act_col:
                             else:
                                 df_settings.at[0, "Console_XIRR"] = input_xirr
                             conn.update(worksheet="Loan_Settings", data=df_settings)
-                        except Exception:
-                            pass
-
-                        # AUTOMATIC INVESTMENT_LOG SNAPSHOT INGESTION
-                        try:
-                            new_total_val = round(float(df_deduped_holdings["current_value"].apply(safe_float).sum()), 2)
-                            new_total_inv = round(float(df_deduped_holdings["invested_value"].apply(safe_float).sum()), 2)
-                            snapshot_row = pd.DataFrame([{
-                                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                "Month_Year": datetime.now().strftime("%b %Y"),
-                                "Total_Invested": new_total_inv,
-                                "Total_Value": new_total_val
-                            }])
-                            conn.update(worksheet="Investment_Log", data=pd.concat([df_inv_log, snapshot_row], ignore_index=True))
                         except Exception:
                             pass
 
@@ -982,33 +958,3 @@ else:
         st.success(f"Executed {logged_payment_type} of {format_inr(pp_amount)} successfully!")
         st.cache_data.clear()
         st.rerun()
-
-st.divider()
-
-# --- SECTION 4: HISTORICAL PORTFOLIO GROWTH TIMELINE ---
-st.subheader("4. Portfolio Monthly Growth Timeline")
-
-if not df_inv_log.empty:
-    try:
-        df_chart = df_inv_log.copy()
-        df_chart.columns = [str(c).strip().lower() for c in df_chart.columns]
-        
-        df_chart["total_invested"] = df_chart["total_invested"].apply(safe_float).round(2)
-        df_chart["total_value"] = df_chart["total_value"].apply(safe_float).round(2)
-        
-        if "month_year" in df_chart.columns:
-            df_monthly = df_chart.groupby("month_year", sort=False).last().reset_index()
-            df_monthly_chart = df_monthly.set_index("month_year")[["total_invested", "total_value"]]
-            df_monthly_chart.columns = ["Total Invested", "Total Value"]
-            
-            st.line_chart(
-                df_monthly_chart,
-                color=["#FF4B4B", "#00CC96"]
-            )
-            
-            with st.expander("📜 View Monthly Growth Log Table"):
-                st.dataframe(df_monthly, hide_index=True)
-    except Exception:
-        st.info("Log portfolio updates to start building your historical growth chart!")
-else:
-    st.info("No historical snapshots recorded yet. Import holdings to record your first snapshot.")
