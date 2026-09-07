@@ -542,12 +542,11 @@ if is_manifest_mode:
     proj_date = "Dec 2035"
     proj_yrs = 0
     proj_mos = 0
-    console_xirr = 15.0 if console_xirr is None else console_xirr
+    console_xirr = 13.6  # Fixed at 13.6% for Dec 2035 Manifestation Screen
 
     st.success(
         "🙏 **December 2035 Manifestation Anchored:**\n"
-        "I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown to **₹1,00,00,000 (₹1 Crore)** "
-        "and my home loan balance is completely **₹0**. My home is 100% mine, generating effortless financial peace and security."
+        "I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown more than home loan princple generating effortless financial peace and security."
     )
 
 # Summary Section
