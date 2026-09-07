@@ -149,15 +149,13 @@ def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = max(0.0, p_balance)
     return p_balance, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared
 
-# --- CURRENT YEAR PREPAYMENT TRACKER HELPER ---
-def get_current_year_prepayment_status(df_loan, full_emi):
-    base_2x = 2 * full_emi
+# --- PREPAYMENT TRACKER HELPER ---
+def get_current_year_prepayment_status(df_loan):
     if not df_loan.empty and "Date" in df_loan.columns:
         df_temp = df_loan.copy()
         df_temp["Date_DT"] = pd.to_datetime(df_temp["Date"], errors="coerce")
         df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
         
-        # Anchor start date to first Full EMI or Prepayment entry (June 2027 onward)
         df_full = df_temp[df_temp["Payment_Type"].str.contains("Full EMI|Prepayment", na=False)]
         
         if not df_full.empty:
@@ -166,36 +164,56 @@ def get_current_year_prepayment_status(df_loan, full_emi):
             start_date = pd.to_datetime("2027-06-01")
             
         now = datetime.now()
-        
-        # If currently in Pre-EMI phase (before June 2027)
         if now < start_date:
-            return 0, base_2x, 0.0, base_2x, False
+            return 0, False
         
-        # Calculate active loan year index starting from June 2027
         elapsed_months = (now.year - start_date.year) * 12 + (now.month - start_date.month)
         current_year_num = max(1, (elapsed_months // 12) + 1)
-        
-        # Target 2x stepped prepayment for current active loan year
-        target_prepay = base_2x * (1.10 ** (current_year_num - 1))
-        
-        # Start date of current 12-month loan year cycle
         year_start_date = start_date + pd.DateOffset(months=(current_year_num - 1) * 12)
         
-        # Filter prepayments logged within current 12-month loan year
         prepays_this_year_df = df_temp[
             (df_temp["Payment_Type"].str.contains("Prepayment", na=False)) & 
             (df_temp["Date_DT"] >= year_start_date)
         ]
         
-        prepays_this_year = prepays_this_year_df["Actual_Payment"].astype(float).sum()
-        
-        # Check if 4% corpus prepayment was already executed in current loan year
         has_4pct_prepay_this_year = prepays_this_year_df["Payment_Type"].str.contains("4% Corpus", na=False).any()
-        
-        pending_prepay = max(0.0, target_prepay - prepays_this_year)
-        return current_year_num, target_prepay, prepays_this_year, pending_prepay, has_4pct_prepay_this_year
+        return current_year_num, has_4pct_prepay_this_year
 
-    return 0, base_2x, 0.0, base_2x, False
+    return 0, False
+
+# --- FORWARD NDZ PROJECTION ENGINE ---
+def project_ndz_target(current_principal, current_portfolio, current_rate, full_emi, is_handover, assumed_cagr=0.12):
+    if current_portfolio >= current_principal:
+        return "Achieved", 0, 0
+        
+    p_bal = current_principal
+    port_val = current_portfolio
+    r_m_loan = (current_rate / 100) / 12
+    r_m_eq = (1 + assumed_cagr)**(1/12) - 1
+    
+    sim_date = datetime.now()
+    handover_date = datetime(2027, 6, 1)
+    months = 0
+    
+    while port_val < p_bal and months < 360:
+        months += 1
+        curr_sim_date = sim_date + pd.DateOffset(months=months)
+        
+        # Determine SIP amount: ₹0 until June 2027 handover (saving for interior), ₹26,807 post-handover
+        if curr_sim_date < handover_date and not is_handover:
+            monthly_sip = 0.0
+            loan_interest = p_bal * r_m_loan
+            # Pre-EMI phase: interest paid, principal stays flat
+        else:
+            monthly_sip = max(0.0, 60000.0 - full_emi)
+            loan_interest = p_bal * r_m_loan
+            p_red = max(0.0, full_emi - loan_interest)
+            p_bal = max(0.0, p_bal - p_red)
+            
+        port_val = (port_val + monthly_sip) * (1 + r_m_eq)
+        
+    projected_date = sim_date + pd.DateOffset(months=months)
+    return projected_date.strftime("%b %Y"), months // 12, months % 12
 
 # --- PARAMETERS & CONNECTION ---
 TICKERS = {
@@ -212,22 +230,24 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        df_loan = conn.read(worksheet="Loan_Tracker", ttl="0")
+        df_loan = conn.read(worksheet="Loan_Tracker", ttl="10")
     except Exception:
         df_loan = pd.DataFrame(columns=["Date", "Month_Year", "Expected_Payment", "Actual_Payment", "Payment_Type", "Confirmed", "Interest_Rate"])
         
     try:
-        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl="0")
+        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl="10")
     except Exception:
         df_portfolio = pd.DataFrame(columns=["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"])
         
     try:
-        df_inv_log = conn.read(worksheet="Investment_Log", ttl="0")
+        df_inv_log = conn.read(worksheet="Investment_Log", ttl="10")
+        if "Actual_SIP" not in df_inv_log.columns:
+            df_inv_log["Actual_SIP"] = 0.0
     except Exception:
-        df_inv_log = pd.DataFrame(columns=["Date", "Month_Year", "Total_Invested", "Total_Value"])
+        df_inv_log = pd.DataFrame(columns=["Date", "Month_Year", "Actual_SIP", "Total_Invested", "Total_Value"])
 
     try:
-        df_settings = conn.read(worksheet="Loan_Settings", ttl="0")
+        df_settings = conn.read(worksheet="Loan_Settings", ttl="10")
         if not df_settings.empty:
             disbursed_ratio = 0.90
             if "Disbursed_Ratio" in df_settings.columns and not pd.isna(df_settings.iloc[0]["Disbursed_Ratio"]):
@@ -256,7 +276,7 @@ def load_data():
 
 df_loan, df_portfolio, df_inv_log, disbursed_ratio, is_handover_completed, current_interest_rate = load_data()
 
-# Update Portfolio Items with Live LTPs & Fallback Safety Net
+# Update Portfolio Items with Live LTPs
 for idx, row in df_portfolio.iterrows():
     cat = row["Category"]
     if cat in TICKERS:
@@ -299,16 +319,24 @@ if is_handover:
     active_due_label = "Monthly EMI Due"
     active_due_amount = full_emi
     disbursement_badge = "100% Disbursed (Handover Complete)"
+    expected_sip = max(0.0, 60000.0 - full_emi)
 else:
     active_due_label = "Pre-EMI Due"
     active_due_amount = monthly_pre_emi
     disbursement_badge = f"{int(disbursed_ratio * 100)}% Disbursed"
+    expected_sip = 0.0  # Paused for interior works accumulation until handover
 
 current_rem_months = calc_rem_months(current_principal, full_emi, r_monthly)
 rem_years = current_rem_months / 12
 
 min_prepayment_allowed = 2 * full_emi
 corpus_4_pct = 0.04 * total_portfolio_val
+is_ndz_achieved = total_portfolio_val >= current_principal
+
+# Run Forward NDZ Projection
+proj_date, proj_yrs, proj_mos = project_ndz_target(
+    current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, assumed_cagr=0.12
+)
 
 # --- DASHBOARD HEADER ---
 st.title("🏡 Home Loan & 📈 Investment Tracker")
@@ -324,14 +352,16 @@ with st.container(border=True):
         st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
         st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target")
     with nd_col2:
-        if net_debt <= 0: 
+        if is_ndz_achieved: 
             st.success("🎉 Zero Debt Achieved!")
         else: 
             st.metric("Net Debt Pending", format_inr(net_debt))
 
+    if not is_ndz_achieved:
+        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming 12% CAGR)")
+
     st.divider()
 
-    # Overall Summary Metrics Row
     s_col1, s_col2, s_col3, s_col4 = st.columns(4)
     pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
     
@@ -342,8 +372,8 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 1: MONTHLY EMI LOGGING & CURRENT MONTH PAYMENT STATUS ---
-st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
+# --- PART 1: MONTHLY EMI & EQUITY SIP TRACKER ---
+st.subheader(f"1. Standard Monthly Payments & SIP Allocation Tracker")
 
 m_col1, m_col2, m_col3 = st.columns(3)
 with m_col1:
@@ -369,7 +399,7 @@ with m_col1:
             
             can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
             
-            if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary", use_container_width=True):
+            if st.button("💾 Save Disbursement Settings", type="primary", width="stretch"):
                 updated_settings = pd.DataFrame([{
                     "Disbursed_Ratio": new_ratio,
                     "Handover_Completed": (new_ratio == 1.0),
@@ -389,7 +419,7 @@ with m_col2:
             step=0.05, 
             format="%.2f"
         )
-        if st.button("💾 Save New Rate", type="primary", use_container_width=True):
+        if st.button("💾 Save New Rate", type="primary", width="stretch"):
             updated_settings = pd.DataFrame([{
                 "Disbursed_Ratio": disbursed_ratio,
                 "Handover_Completed": is_handover_completed,
@@ -410,23 +440,29 @@ if not df_loan.empty and "Month_Year" in df_loan.columns:
 else:
     is_current_month_paid = False
 
+# Fetch Actual SIP logged for current month from Investment_Log
+if not df_inv_log.empty and "Month_Year" in df_inv_log.columns and "Actual_SIP" in df_inv_log.columns:
+    current_sip_log = df_inv_log[df_inv_log["Month_Year"] == current_month_str]
+    actual_sip_logged = float(current_sip_log["Actual_SIP"].iloc[-1]) if not current_sip_log.empty else 0.0
+else:
+    actual_sip_logged = 0.0
+
 with st.form("emi_form", clear_on_submit=True):
     c1, c2, c3 = st.columns(3)
-    
     c1.text_input("Month-Year", value=current_month_str, disabled=True)
     
     payment_type = "Full EMI" if is_handover else "Pre-EMI"
     expected_loan = full_emi if is_handover else monthly_pre_emi
-    c2.text_input("Actual Payment Made", value=format_inr(expected_loan), disabled=True)
+    c2.text_input("Actual Loan Payment Made", value=format_inr(expected_loan), disabled=True)
     
     with c3:
-        st.markdown("**Payment Status**")
+        st.markdown("**Loan Payment Status**")
         if is_current_month_paid:
             st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 PAID</span>", unsafe_allow_html=True)
         else:
             st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
 
-    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid, use_container_width=True):
+    if st.form_submit_button("Log Monthly Loan Payment", disabled=is_current_month_paid, width="stretch"):
         new_row = pd.DataFrame([{
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
             "Month_Year": current_month_str, 
@@ -440,8 +476,48 @@ with st.form("emi_form", clear_on_submit=True):
         st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
         st.rerun()
 
-if is_current_month_paid:
-    st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
+# --- EQUITY SIP ALLOCATION TRACKER CARD ---
+with st.container(border=True):
+    st.markdown(f"### 📈 Equity SIP Allocation Tracker ({current_month_str})")
+    
+    sip_c1, sip_c2, sip_c3 = st.columns(3)
+    sip_c1.metric("Expected Monthly SIP", format_inr(expected_sip), "Paused for Interior" if not is_handover else "₹60k - Full EMI")
+    sip_c2.metric("Actual SIP Logged", format_inr(actual_sip_logged))
+    
+    with sip_c3:
+        st.markdown("**SIP Status**")
+        if not is_handover:
+            st.markdown("<span style='color:#808495; font-weight:bold; font-size:18px;'>⏳ PAUSED (Interior Works Accumulation)</span>", unsafe_allow_html=True)
+        elif actual_sip_logged >= expected_sip:
+            st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 TARGET MET</span>", unsafe_allow_html=True)
+        else:
+            deficit = expected_sip - actual_sip_logged
+            st.markdown(f"<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 DEFICIT ({format_inr(deficit)})</span>", unsafe_allow_html=True)
+
+    with st.popover("✏️ Log / Update Current Month Actual SIP", width="stretch"):
+        st.markdown("### 💸 Log Actual Equity SIP")
+        user_actual_sip = st.number_input("Actual Equity SIP Invested This Month (₹)", min_value=0.0, value=float(actual_sip_logged), step=1000.0)
+        
+        if st.button("💾 Save Actual SIP Entry", type="primary", width="stretch"):
+            # Update or append Actual SIP entry in Investment_Log
+            if not df_inv_log.empty and current_month_str in df_inv_log["Month_Year"].values:
+                idx = df_inv_log[df_inv_log["Month_Year"] == current_month_str].index[-1]
+                df_inv_log.at[idx, "Actual_SIP"] = user_actual_sip
+                df_inv_log.at[idx, "Date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                updated_inv_log = df_inv_log
+            else:
+                new_sip_row = pd.DataFrame([{
+                    "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Month_Year": current_month_str,
+                    "Actual_SIP": user_actual_sip,
+                    "Total_Invested": total_portfolio_invested,
+                    "Total_Value": total_portfolio_val
+                }])
+                updated_inv_log = pd.concat([df_inv_log, new_sip_row], ignore_index=True)
+                
+            conn.update(worksheet="Investment_Log", data=updated_inv_log)
+            st.success(f"Logged Actual SIP of {format_inr(user_actual_sip)} for {current_month_str}!")
+            st.rerun()
 
 # --- PRINCIPAL CLEARED VISUALIZER CARD ---
 with st.container(border=True):
@@ -456,43 +532,32 @@ with st.container(border=True):
 
 st.divider()
 
-# --- PART 2: PORTFOLIO HOLDINGS (MOBILE CARDS & POP-UP EDIT FORM) ---
+# --- PART 2: PORTFOLIO HOLDINGS (BULK EDIT DATA TABLE) ---
 sec2_col1, sec2_col2 = st.columns([3, 1])
 
 with sec2_col1:
     st.subheader("2. Live Portfolio Holdings")
 with sec2_col2:
-    with st.popover("✏️ Edit Holdings", use_container_width=True):
+    with st.popover("✏️ Edit Holdings", width="stretch"):
         st.markdown("### 📊 Update Asset Holdings")
+        st.caption("Update Qty and Invested Amount for all holdings below and save all at once:")
         
-        selected_cat = st.selectbox(
-            "Select Asset:",
-            df_portfolio["Category"].tolist()
+        editor_df = df_portfolio[["Category", "Units_Accumulated", "Invested_Value"]].copy()
+        
+        edited_data = st.data_editor(
+            editor_df,
+            column_config={
+                "Category": st.column_config.TextColumn("Holding Name", disabled=True),
+                "Units_Accumulated": st.column_config.NumberColumn("Qty", min_value=0.0, step=1.0, format="%.4f"),
+                "Invested_Value": st.column_config.NumberColumn("Invested Amount (₹)", min_value=0.0, step=1000.0, format="%.2f")
+            },
+            hide_index=True,
+            width="stretch"
         )
         
-        selected_row = df_portfolio[df_portfolio["Category"] == selected_cat].iloc[0]
-        curr_units = float(selected_row["Units_Accumulated"])
-        curr_invested = float(selected_row["Invested_Value"])
-        
-        new_units = st.number_input(
-            "Units Accumulated", 
-            value=curr_units, 
-            min_value=0.0, 
-            step=1.0, 
-            format="%.4f"
-        )
-        new_invested = st.number_input(
-            "Total Amount Invested (₹)", 
-            value=curr_invested, 
-            min_value=0.0, 
-            step=1000.0, 
-            format="%.2f"
-        )
-        
-        if st.button("💾 Save Asset Updates", type="primary", use_container_width=True):
-            idx = df_portfolio[df_portfolio["Category"] == selected_cat].index[0]
-            df_portfolio.at[idx, "Units_Accumulated"] = new_units
-            df_portfolio.at[idx, "Invested_Value"] = new_invested
+        if st.button("💾 Save All Holdings Updates", type="primary", width="stretch"):
+            df_portfolio["Units_Accumulated"] = edited_data["Units_Accumulated"]
+            df_portfolio["Invested_Value"] = edited_data["Invested_Value"]
             
             for i, r in df_portfolio.iterrows():
                 if r["Current_LTP"] <= 0 and r["Units_Accumulated"] > 0 and r["Invested_Value"] > 0:
@@ -509,6 +574,7 @@ with sec2_col2:
             snapshot_row = pd.DataFrame([{
                 "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "Month_Year": datetime.now().strftime("%b %Y"),
+                "Actual_SIP": actual_sip_logged,
                 "Total_Invested": new_total_inv,
                 "Total_Value": new_total_val
             }])
@@ -516,10 +582,9 @@ with sec2_col2:
             updated_inv_log = pd.concat([df_inv_log, snapshot_row], ignore_index=True)
             conn.update(worksheet="Investment_Log", data=updated_inv_log)
             
-            st.success(f"Updated {selected_cat} successfully!")
+            st.success("All portfolio holdings updated successfully!")
             st.rerun()
 
-# READONLY CARDS VIEW (HIDES ASSETS WHERE INVESTED AMOUNT IS 0)
 active_holdings = df_portfolio[df_portfolio["Invested_Value"] > 0]
 
 if active_holdings.empty:
@@ -548,66 +613,42 @@ else:
 st.divider()
 
 # --- PART 3: PART PAYMENT & PREPAYMENT ENGINE ---
-st.subheader("3. Part Payment & Prepayment Tracker")
+st.subheader("3. Part Payment & Prepayment Engine")
 
-# 1. Mandatory 10% Step-Up 2x EMI Prepayment Tracker
-curr_year_num, curr_target_prepay, curr_paid_prepay, curr_pending_prepay, has_4pct_executed = get_current_year_prepayment_status(df_loan, full_emi)
+curr_year_num, has_4pct_executed = get_current_year_prepayment_status(df_loan)
 
-with st.container(border=True):
-    if curr_year_num == 0:
-        st.markdown("### 📅 Mandatory 10% Stepped 2x Prepayment Tracker (**Pre-EMI Phase - Starts June 2027**)")
-    else:
-        st.markdown(f"### 📅 Mandatory 10% Stepped 2x Prepayment Tracker (**Loan Year {curr_year_num}**)")
+if not is_ndz_achieved:
+    st.warning(
+        f"🔒 **PREPAYMENTS STRICTLY LOCKED (Capital Stacking Phase Active):** "
+        f"Your current portfolio value ({format_inr(total_portfolio_val)}) has not yet reached "
+        f"your pending principal ({format_inr(current_principal)}). Prepayments are disabled to maximize "
+        f"equity compounding velocity until Net-Debt-Zero is achieved."
+    )
+else:
+    st.success("🎉 **NET-DEBT-ZERO ACHIEVED!** Conditional 4% Corpus Rule prepayments are now active.")
     
-    p_col1, p_col2, p_col3 = st.columns(3)
-    p_col1.metric("Current Year Target", format_inr(curr_target_prepay), f"Year {max(1, curr_year_num)} Obligation")
-    p_col2.metric("Prepayments Paid So Far", format_inr(curr_paid_prepay))
-    
-    with p_col3:
-        if curr_year_num == 0:
-            st.markdown("**Pending Target**")
-            st.markdown("<span style='color:#808495; font-weight:bold; font-size:18px;'>⏳ PRE-EMI PHASE</span>", unsafe_allow_html=True)
-        elif curr_pending_prepay <= 0:
-            st.markdown("**Pending Target**")
-            st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 YEARLY TARGET MET</span>", unsafe_allow_html=True)
-        else:
-            st.metric("Pending Target for Year", format_inr(curr_pending_prepay))
+    with st.container(border=True):
+        st.markdown("### 🚦 4% Portfolio Corpus Rule Conditions")
+        st.caption("ℹ️ **Annual Limit:** Allowed strictly **1 time per loan year**, provided Zerodha Console XIRR > 10.0%.")
+        
+        rule_col1, rule_col2, rule_col3 = st.columns(3)
+        rule_col1.metric("4% Corpus Allocation", format_inr(corpus_4_pct))
+        rule_col2.metric("2x EMI Minimum Threshold", format_inr(min_prepayment_allowed))
+        
+        is_corpus_sufficient = corpus_4_pct >= min_prepayment_allowed
+        with rule_col3:
+            st.markdown("**Corpus Requirement**")
+            if has_4pct_executed:
+                st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR (1/1 Used)</span>", unsafe_allow_html=True)
+            elif is_corpus_sufficient:
+                st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 MET (≥ 2x EMI)</span>", unsafe_allow_html=True)
+            else:
+                st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED (< 2x EMI)</span>", unsafe_allow_html=True)
 
-# 2. Live 4% Portfolio Corpus Rule Status
-with st.container(border=True):
-    st.markdown("### 🚦 Live 4% Portfolio Corpus Rule Status")
-    st.caption("ℹ️ **Annual Limit:** Tapping the portfolio corpus under this rule is strictly limited to **1 time per loan year**.")
-    
-    rule_col1, rule_col2, rule_col3 = st.columns(3)
-    rule_col1.metric("4% Corpus Allocation", format_inr(corpus_4_pct))
-    rule_col2.metric("2x EMI Minimum Threshold", format_inr(min_prepayment_allowed))
-    
-    is_corpus_sufficient = corpus_4_pct >= min_prepayment_allowed
-    with rule_col3:
-        st.markdown("**Corpus Requirement**")
-        if has_4pct_executed:
-            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR (1/1 Used)</span>", unsafe_allow_html=True)
-        elif is_corpus_sufficient:
-            st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 MET (≥ 2x EMI)</span>", unsafe_allow_html=True)
-        else:
-            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED (< 2x EMI)</span>", unsafe_allow_html=True)
+    st.markdown("### 💸 Execute 4% Corpus Part Payment")
+    pp_input_col1, pp_input_col2 = st.columns(2)
 
-st.markdown("### 💸 Execute Part Payment")
-
-prepay_strategy_type = st.radio(
-    "Select Prepayment Strategy to Execute:",
-    options=[
-        "Mandatory 10% Stepped 2x Annual Prepayment",
-        "4% Portfolio Corpus Rule (Requires XIRR > 10%)"
-    ],
-    horizontal=True
-)
-
-pp_input_col1, pp_input_col2 = st.columns(2)
-
-if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
     with pp_input_col1:
-        st.caption("⚠️ *Rule Restriction: Tapping the corpus under this strategy is limited to strictly 1 time per loan year.*")
         user_xirr = st.number_input(
             "Enter Zerodha Console XIRR (%)", 
             value=0.0, 
@@ -618,7 +659,7 @@ if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
     is_xirr_valid = user_xirr > 10.0
     
     if has_4pct_executed:
-        st.warning(f"🔒 **Part Payment Locked (Annual Limit Reached):** You have already executed your 1-time 4% Corpus Rule prepayment for Loan Year {curr_year_num}. Further withdrawals under this rule are locked until next loan year.")
+        st.warning(f"🔒 **Part Payment Locked (Annual Limit Reached):** You have already executed your 1-time 4% Corpus Rule prepayment for Loan Year {curr_year_num}.")
         default_pp_val = float(min_prepayment_allowed)
         enable_pp = False
     elif not is_xirr_valid:
@@ -626,7 +667,7 @@ if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
         default_pp_val = float(min_prepayment_allowed)
         enable_pp = False
     elif not is_corpus_sufficient:
-        st.info(f"⏳ **Corpus Growth Required:** Your 4% corpus allocation (**{format_inr(corpus_4_pct)}**) is less than the minimum 2x EMI (**{format_inr(min_prepayment_allowed)}**).")
+        st.info(f"⏳ **Corpus Growth Required:** Your 4% corpus allocation (**{format_inr(corpus_4_pct)}**) is less than 2x EMI (**{format_inr(min_prepayment_allowed)}**).")
         default_pp_val = float(min_prepayment_allowed)
         enable_pp = False
     else:
@@ -642,53 +683,25 @@ if prepay_strategy_type == "4% Portfolio Corpus Rule (Requires XIRR > 10%)":
             disabled=not enable_pp,
             help="Defaulted to 4% of actual corpus value when unlocked."
         )
-    logged_payment_type = "Prepayment (4% Corpus)"
 
-else:  # Mandatory 10% Stepped 2x Annual Prepayment
-    with pp_input_col1:
-        st.info(f"ℹ️ **Annual Prepayment Rule:** Allows paying up to your Year {max(1, curr_year_num)} stepped target (**{format_inr(curr_target_prepay)}**).")
+    new_rem_months = calc_rem_months(current_principal - (pp_amount if enable_pp else 0.0), full_emi, r_monthly)
+    months_saved = max(0, current_rem_months - new_rem_months)
 
-    if curr_year_num == 0:
-        st.warning("⏳ **Pre-EMI Phase Active:** Mandatory prepayments start in June 2027.")
-        enable_pp = False
-        default_pp_val = float(base_2x if 'base_2x' in locals() else 2 * full_emi)
-    elif curr_pending_prepay <= 0:
-        st.success("🎉 **Current Year Target Already Paid:** You have met your 10% stepped prepayment obligation for this year.")
-        enable_pp = False
-        default_pp_val = float(curr_target_prepay)
-    else:
-        enable_pp = True
-        default_pp_val = float(curr_pending_prepay)
+    st.metric("Tenure Reduced By", f"{int(months_saved)} Months", f"~ {months_saved/12:.1f} Years saved")
 
-    with pp_input_col2:
-        pp_amount = st.number_input(
-            "Part Payment Amount (₹)", 
-            value=default_pp_val, 
-            step=5000.0, 
-            disabled=not enable_pp,
-            help="Defaulted to your remaining pending prepayment target for the active loan year."
-        )
-    logged_payment_type = "Prepayment (10% Stepped)"
-
-# Dynamic Tenure Reduction Display
-new_rem_months = calc_rem_months(current_principal - (pp_amount if enable_pp else 0.0), full_emi, r_monthly)
-months_saved = max(0, current_rem_months - new_rem_months)
-
-st.metric("Tenure Reduced By", f"{int(months_saved)} Months", f"~ {months_saved/12:.1f} Years saved")
-
-if st.button("Execute Part Payment & Log to Sheet", disabled=not enable_pp, type="primary", use_container_width=True):
-    new_row = pd.DataFrame([{
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-        "Month_Year": datetime.now().strftime("%b %Y"), 
-        "Expected_Payment": 0.0, 
-        "Actual_Payment": pp_amount, 
-        "Payment_Type": logged_payment_type, 
-        "Confirmed": True,
-        "Interest_Rate": current_interest_rate
-    }])
-    conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-    st.success(f"Part payment of {format_inr(pp_amount)} applied! Tenure reduced by {int(months_saved)} months.")
-    st.rerun()
+    if st.button("Execute Part Payment & Log to Sheet", disabled=not enable_pp, type="primary", width="stretch"):
+        new_row = pd.DataFrame([{
+            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+            "Month_Year": datetime.now().strftime("%b %Y"), 
+            "Expected_Payment": 0.0, 
+            "Actual_Payment": pp_amount, 
+            "Payment_Type": "Prepayment (4% Corpus)", 
+            "Confirmed": True,
+            "Interest_Rate": current_interest_rate
+        }])
+        conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
+        st.success(f"Part payment of {format_inr(pp_amount)} applied! Tenure reduced by {int(months_saved)} months.")
+        st.rerun()
 
 st.divider()
 
@@ -709,9 +722,9 @@ if not df_inv_log.empty:
         st.line_chart(
             df_monthly_chart,
             color=["#FF4B4B", "#00CC96"],
-            use_container_width=True
+            width="stretch"
         )
     except Exception:
         st.info("Log your portfolio updates to start building your historical growth chart!")
 else:
-    st.info("No historical snapshots found yet. Click 'Save Portfolio Updates & Record Snapshot' above to record your first snapshot.")
+    st.info("No historical snapshots found yet. Click 'Save All Holdings Updates' above to record your first snapshot.")
