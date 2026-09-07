@@ -140,7 +140,7 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
         pass
     return default_nav
 
-# --- DUAL HOLDINGS PARSER (KITE CSV & CONSOLE EXCEL) ---
+# --- UNIVERSAL HOLDINGS PARSER (KITE CSV & CONSOLE EXCEL) ---
 def parse_zerodha_holdings_file(uploaded_file):
     fname = uploaded_file.name.upper()
     match = re.search(r'\b([A-Z0-9]{6})\b', fname)
@@ -156,7 +156,6 @@ def parse_zerodha_holdings_file(uploaded_file):
         sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
         df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
         
-        # 1. Extract Client ID from cells
         for r in range(min(15, len(df_raw))):
             row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
             if 'Client ID' in row_vals:
@@ -164,7 +163,6 @@ def parse_zerodha_holdings_file(uploaded_file):
                 if idx + 1 < len(row_vals):
                     client_id = row_vals[idx + 1].upper()
                     
-        # 2. Find table header row
         header_idx = -1
         for r in range(len(df_raw)):
             row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
@@ -381,7 +379,7 @@ with sec2_act_col:
             type=["csv", "xlsx", "xls"], 
             accept_multiple_files=True,
             key="holdings_uploader",
-            help="Upload Kite CSVs (holdings-HEK312.csv) or Console Excel statements (holdings-SDB789.xlsx)."
+            help="Upload multiple files at once (e.g. holdings-HEK312.csv, holdings-SDB789.xlsx)."
         )
 
         input_xirr = st.number_input(
@@ -402,7 +400,7 @@ with sec2_act_col:
             else:
                 parsed_records = []
                 for file in uploaded_files:
-                    cid, df_parsed = parse_zerodha_holdings_file(file)
+                    cid, df_parsed = parse_zerodha_holdings_file(file, file.name)
                     if not df_parsed.empty:
                         parsed_records.append(df_parsed)
                         st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}** from `{file.name}`")
