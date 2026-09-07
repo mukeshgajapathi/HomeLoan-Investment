@@ -141,15 +141,18 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
     return default_nav
 
 # --- UNIVERSAL HOLDINGS PARSER (KITE CSV & CONSOLE EXCEL) ---
-def parse_zerodha_holdings_file(uploaded_file, filename=None):
+def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_id=None):
     file_name_str = filename if filename else getattr(uploaded_file, 'name', str(uploaded_file))
     fname = file_name_str.upper()
     
-    match = re.search(r'\b([A-Z0-9]{6})\b', fname)
-    filename_acc_id = match.group(1) if match else "SDB789"
+    # Priority: 1. Manual user override -> 2. Filename match -> 3. Sheet cell
+    client_id = override_account_id.strip().upper() if (override_account_id and override_account_id.strip()) else None
+
+    if not client_id:
+        match = re.search(r'\b([A-Z0-9]{6})\b', fname)
+        client_id = match.group(1) if match else "SDB789"
     
     records = []
-    client_id = filename_acc_id
 
     # CASE A: Zerodha Console Excel Statement (.xlsx / .xls)
     if fname.endswith(('.XLSX', '.XLS')):
@@ -158,12 +161,14 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None):
         sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
         df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
         
-        for r in range(min(15, len(df_raw))):
-            row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
-            if 'Client ID' in row_vals:
-                idx = row_vals.index('Client ID')
-                if idx + 1 < len(row_vals):
-                    client_id = row_vals[idx + 1].upper()
+        if not override_account_id:
+            for r in range(min(15, len(df_raw))):
+                row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
+                if 'Client ID' in row_vals:
+                    idx = row_vals.index('Client ID')
+                    if idx + 1 < len(row_vals):
+                        client_id = row_vals[idx + 1].upper()
+                        break
                     
         header_idx = -1
         for r in range(len(df_raw)):
@@ -683,6 +688,39 @@ with sec2_act_col:
             help="Upload multiple files at once (e.g. holdings-HEK312.csv, holdings-SDB789.xlsx)."
         )
 
+        account_mapping = {}
+        if uploaded_files:
+            st.markdown("---")
+            st.markdown("**👤 Confirm Account ID per File:**")
+            for file in uploaded_files:
+                match = re.search(r'\b([A-Z0-9]{6})\b', file.name.upper())
+                detected_acc = match.group(1) if match else ""
+                
+                # Peek into Excel header if no filename match
+                if not detected_acc and file.name.upper().endswith(('.XLSX', '.XLS')):
+                    try:
+                        xls = pd.ExcelFile(file)
+                        sheet_to_use = 'Combined' if 'Combined' in xls.sheet_names else xls.sheet_names[0]
+                        df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None, nrows=15)
+                        for r in range(len(df_raw)):
+                            row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
+                            if 'Client ID' in row_vals:
+                                idx = row_vals.index('Client ID')
+                                if idx + 1 < len(row_vals):
+                                    detected_acc = row_vals[idx + 1].upper()
+                                    break
+                    except Exception:
+                        pass
+                        
+                user_acc = st.text_input(
+                    f"Account ID for `{file.name}`:",
+                    value=detected_acc,
+                    placeholder="e.g. HEK312 or SDB789 (Mandatory)",
+                    key=f"acc_input_{file.name}"
+                )
+                account_mapping[file.name] = user_acc.strip().upper()
+
+        st.markdown("---")
         input_xirr = st.number_input(
             "Console Overall XIRR (%)", 
             value=None,
@@ -694,14 +732,18 @@ with sec2_act_col:
         )
 
         if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings"):
+            missing_accounts = [fname for fname, acc in account_mapping.items() if not acc]
             if input_xirr is None:
                 st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
             elif not uploaded_files:
                 st.error("⚠️ Please select at least one holdings CSV or Excel file to upload.")
+            elif missing_accounts:
+                st.error(f"⚠️ Please specify an Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
             else:
                 parsed_records = []
                 for file in uploaded_files:
-                    cid, df_parsed = parse_zerodha_holdings_file(file, file.name)
+                    target_acc = account_mapping.get(file.name, "")
+                    cid, df_parsed = parse_zerodha_holdings_file(file, file.name, override_account_id=target_acc)
                     if not df_parsed.empty:
                         parsed_records.append(df_parsed)
                         st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}** from `{file.name}`")
