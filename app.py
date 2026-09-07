@@ -95,17 +95,6 @@ TICKER_MAP = {
     "MIDCAPETF": "MID150BEES.NS"
 }
 
-EXCLUDE_KEYWORDS = ["FUT", "CE", "PE", "MCX", "GOLDPETAL", "GOLDGUINEA", "CRUDEOIL", "CALL", "PUT", "OPT", "FUTURES"]
-
-def is_equity_or_etf(symbol_str):
-    sym = str(symbol_str).upper()
-    if re.search(r'\b\d{2}[A-Z]{3}\b', sym) or re.search(r'\d+(CE|PE)\b', sym):
-        return False
-    for kw in EXCLUDE_KEYWORDS:
-        if kw in sym:
-            return False
-    return True
-
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker, default_price=0.0):
     if not ticker: return default_price
@@ -150,176 +139,66 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
         pass
     return default_nav
 
-def solve_xirr(cash_flows, dates, guess=0.12):
-    try:
-        if len(cash_flows) < 2 or sum(cash_flows) == 0: return 0.12
-        d0 = dates[0]
-        years = [(d - d0).days / 365.25 for d in dates]
-
-        def f(r):
-            if r <= -0.99: return 1e10
-            return sum(cf / ((1 + r) ** y) for cf, y in zip(cash_flows, years))
-
-        def df(r):
-            if r <= -0.99: return -1e10
-            return sum(-y * cf / ((1 + r) ** (y + 1)) for cf, y in zip(cash_flows, years))
-
-        r = guess
-        for _ in range(100):
-            f_val = f(r)
-            df_val = df(r)
-            if abs(df_val) < 1e-12: break
-            new_r = r - f_val / df_val
-            if abs(new_r - r) < 1e-6:
-                return max(0.05, min(new_r, 0.35))
-            r = new_r
-        return max(0.05, min(r, 0.35))
-    except Exception:
-        return 0.12
-
-# --- PROCESS TRADEBOOK WITH COLUMN DEDUPLICATION & TYPE SAFETY ---
-def process_tradebook_tab(df_tradebook):
-    if df_tradebook.empty:
-        return None, pd.DataFrame(), pd.DataFrame()
-
-    df_raw = df_tradebook.copy()
-    df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
-    df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
-
-    sym_col = 'symbol' if 'symbol' in df_raw.columns else df_raw.columns[0]
-    date_col = 'trade_date' if 'trade_date' in df_raw.columns else 'date'
-    type_col = 'trade_type' if 'trade_type' in df_raw.columns else 'type'
-    qty_col = 'quantity' if 'quantity' in df_raw.columns else 'qty'
-    price_col = 'price' if 'price' in df_raw.columns else 'rate'
-    seg_col = 'segment' if 'segment' in df_raw.columns else None
-    isin_col = 'isin' if 'isin' in df_raw.columns else None
-
-    acc_col = None
-    for possible_acc in ['account', 'account_id', 'client_id', 'user', 'owner']:
-        if possible_acc in df_raw.columns:
-            acc_col = possible_acc
+# --- PARSE CONSOLE HOLDINGS EXCEL ---
+def parse_zerodha_holdings_excel(uploaded_file):
+    xls = pd.ExcelFile(uploaded_file)
+    sheets = xls.sheet_names
+    records = []
+    client_id = "SDB789"
+    
+    sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
+    df = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
+    
+    # 1. Extract Client ID
+    for r in range(min(15, len(df))):
+        row_vals = [safe_str(x) for x in df.iloc[r].dropna().values]
+        if 'Client ID' in row_vals:
+            idx = row_vals.index('Client ID')
+            if idx + 1 < len(row_vals):
+                client_id = row_vals[idx + 1].upper()
+                
+    # 2. Find table header row
+    header_idx = -1
+    for r in range(len(df)):
+        row_vals = [safe_str(x).upper() for x in df.iloc[r].dropna().values]
+        if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
+            header_idx = r
             break
-
-    if date_col in df_raw.columns:
-        df_raw["Date_DT"] = pd.to_datetime(df_raw[date_col], errors="coerce")
-        df_raw = df_raw.dropna(subset=["Date_DT"]).sort_values("Date_DT")
-
-    holdings = {}
-    cash_flows = []
-    dates = []
-
-    for _, row in df_raw.iterrows():
-        sym = safe_str(row.get(sym_col, "")).upper()
-        t_type = safe_str(row.get(type_col, "")).lower()
-        qty = safe_float(row.get(qty_col, 0.0))
-        price = safe_float(row.get(price_col, 0.0))
-        trade_val = qty * price
+            
+    if header_idx != -1:
+        headers = [safe_str(x) for x in df.iloc[header_idx].values]
+        df_data = df.iloc[header_idx+1:].copy()
+        df_data.columns = headers
         
-        raw_seg = safe_str(row.get(seg_col, "")).upper() if seg_col else ""
-        isin_val = safe_str(row.get(isin_col, "")) if isin_col else ""
-        
-        acc_val = safe_str(row.get(acc_col, "SDB789")).upper() if acc_col else "SDB789"
-        if acc_val in ["NAN", "NONE", ""]: acc_val = "SDB789"
-
-        if raw_seg == 'MF' or any(kw in sym for kw in ['DIRECT', 'GROWTH', 'MUTUAL', 'FUND', 'OPTION']):
-            asset_class = "Mutual Fund"
-        else:
-            asset_class = "Equity / ETF"
-
-        if not is_equity_or_etf(sym) or trade_val <= 0:
-            continue
-
-        if t_type == 'buy':
-            cash_flows.append(-trade_val)
-            dates.append(row["Date_DT"])
-        elif t_type == 'sell':
-            cash_flows.append(trade_val)
-            dates.append(row["Date_DT"])
-
-        holding_key = (sym, acc_val)
-
-        if holding_key not in holdings:
-            holdings[holding_key] = {
-                "symbol": sym,
-                "account": acc_val,
-                "qty": 0.0, 
-                "invested": 0.0, 
-                "avg_cost": 0.0, 
-                "last_price": price,
-                "asset_class": asset_class,
-                "isin": isin_val
-            }
-
-        h = holdings[holding_key]
-        h["last_price"] = price
-
-        if t_type == 'buy':
-            h["qty"] += qty
-            h["invested"] += trade_val
-            if h["qty"] > 0:
-                h["avg_cost"] = h["invested"] / h["qty"]
-        elif t_type == 'sell':
-            if h["qty"] > 0:
-                h["qty"] = max(0.0, h["qty"] - qty)
-                if h["qty"] == 0:
-                    h["invested"] = 0.0
-                    h["avg_cost"] = 0.0
-                else:
-                    h["invested"] = h["qty"] * h["avg_cost"]
-
-    eq_rows = []
-    mf_rows = []
-    total_active_val = 0.0
-
-    for (sym, acc), data in holdings.items():
-        if data["qty"] > 0 and data["invested"] > 0:
-            if data["asset_class"] == "Mutual Fund":
-                live_nav = fetch_mf_nav_by_isin(data["isin"], default_nav=data["last_price"])
-                curr_val = data["qty"] * live_nav
-                pnl = curr_val - data["invested"]
-                total_active_val += curr_val
-
-                mf_rows.append({
-                    "Symbol": sym,
-                    "Account": data["account"],
-                    "ISIN": data["isin"],
-                    "Units_Accumulated": data["qty"],
-                    "Avg_Cost": data["avg_cost"],
-                    "Current_LTP": live_nav,
-                    "Invested_Value": data["invested"],
-                    "Current_Value": curr_val,
-                    "P&L (₹)": pnl
-                })
-            else:
-                ticker = TICKER_MAP.get(sym, f"{sym}.NS")
-                ltp = fetch_live_ltp(ticker, default_price=data["last_price"])
-                curr_val = data["qty"] * ltp
-                pnl = curr_val - data["invested"]
-                total_active_val += curr_val
-
-                eq_rows.append({
-                    "Symbol": sym,
-                    "Account": data["account"],
-                    "ISIN": data["isin"],
-                    "Units_Accumulated": data["qty"],
-                    "Avg_Cost": data["avg_cost"],
+        for _, row in df_data.iterrows():
+            sym = safe_str(row.get('Symbol', ''))
+            if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
+                continue
+                
+            qty = safe_float(row.get('Quantity Available', 0.0))
+            avg_price = safe_float(row.get('Average Price', 0.0))
+            ltp = safe_float(row.get('Previous Closing Price', 0.0))
+            isin = safe_str(row.get('ISIN', ''))
+            inst_type = safe_str(row.get('Instrument Type', ''))
+            
+            asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
+            clean_sym = sym.replace('-E', '').strip()
+            
+            if qty > 0:
+                records.append({
+                    "Account": client_id,
+                    "Symbol": clean_sym,
+                    "ISIN": isin,
+                    "Asset_Class": asset_class,
+                    "Units_Accumulated": qty,
+                    "Avg_Cost": avg_price,
                     "Current_LTP": ltp,
-                    "Invested_Value": data["invested"],
-                    "Current_Value": curr_val,
-                    "P&L (₹)": pnl
+                    "Invested_Value": round(qty * avg_price, 2),
+                    "Current_Value": round(qty * ltp, 2),
+                    "P&L (₹)": round(qty * (ltp - avg_price), 2)
                 })
-
-    df_eq_active = pd.DataFrame(eq_rows)
-    df_mf_active = pd.DataFrame(mf_rows)
-
-    if cash_flows:
-        cash_flows.append(float(total_active_val if total_active_val > 0 else 1.0))
-        dates.append(datetime.now())
-        computed_xirr = solve_xirr(cash_flows, dates)
-    else:
-        computed_xirr = None
-
-    return computed_xirr, df_eq_active, df_mf_active
+                
+    return client_id, pd.DataFrame(records)
 
 INITIAL_LOAN = 4890000.0
 
@@ -327,16 +206,78 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try: 
-        df_tradebook = conn.read(worksheet="Tradebook", ttl=0)
-        if not df_tradebook.empty:
-            df_tradebook.columns = [str(c).strip().lower() for c in df_tradebook.columns]
-            df_tradebook = df_tradebook.loc[:, ~df_tradebook.columns.duplicated()]
+        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=0)
+        if not df_portfolio.empty:
+            df_portfolio.columns = [str(c).strip().lower() for c in df_portfolio.columns]
+            df_portfolio = df_portfolio.loc[:, ~df_portfolio.columns.duplicated()]
     except Exception: 
-        df_tradebook = pd.DataFrame()
-    return df_tradebook
+        df_portfolio = pd.DataFrame()
 
-df_tradebook = load_data()
-computed_xirr, df_eq_active, df_mf_active = process_tradebook_tab(df_tradebook)
+    try:
+        df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
+        user_xirr = 0.12
+        if not df_settings.empty and "Console_XIRR" in df_settings.columns:
+            val = safe_float(df_settings.iloc[0]["Console_XIRR"], 0.12)
+            if val > 0: user_xirr = val / 100.0 if val > 1 else val
+    except Exception:
+        user_xirr = 0.12
+
+    return df_portfolio, user_xirr
+
+df_portfolio_raw, console_xirr = load_data()
+
+# Process Portfolio Data from Sheet
+eq_rows = []
+mf_rows = []
+
+if not df_portfolio_raw.empty:
+    for _, row in df_portfolio_raw.iterrows():
+        sym = safe_str(row.get('symbol', ''))
+        acc = safe_str(row.get('account', 'SDB789')).upper()
+        isin_val = safe_str(row.get('isin', ''))
+        asset_class = safe_str(row.get('asset_class', 'Equity / ETF'))
+        units = safe_float(row.get('units_accumulated', 0.0))
+        avg_cost = safe_float(row.get('avg_cost', 0.0))
+        last_ltp = safe_float(row.get('current_ltp', 0.0))
+        
+        if units <= 0: continue
+        
+        if asset_class == "Mutual Fund":
+            live_nav = fetch_mf_nav_by_isin(isin_val, default_nav=last_ltp)
+            curr_val = units * live_nav
+            pnl = curr_val - (units * avg_cost)
+            
+            mf_rows.append({
+                "Symbol": sym,
+                "Account": acc,
+                "ISIN": isin_val,
+                "Units_Accumulated": units,
+                "Avg_Cost": avg_cost,
+                "Current_LTP": live_nav,
+                "Invested_Value": units * avg_cost,
+                "Current_Value": curr_val,
+                "P&L (₹)": pnl
+            })
+        else:
+            ticker = TICKER_MAP.get(sym, f"{sym}.NS")
+            ltp = fetch_live_ltp(ticker, default_price=last_ltp)
+            curr_val = units * ltp
+            pnl = curr_val - (units * avg_cost)
+            
+            eq_rows.append({
+                "Symbol": sym,
+                "Account": acc,
+                "ISIN": isin_val,
+                "Units_Accumulated": units,
+                "Avg_Cost": avg_cost,
+                "Current_LTP": ltp,
+                "Invested_Value": units * avg_cost,
+                "Current_Value": curr_val,
+                "P&L (₹)": pnl
+            })
+
+df_eq_active = pd.DataFrame(eq_rows)
+df_mf_active = pd.DataFrame(mf_rows)
 
 eq_val = df_eq_active["Current_Value"].sum() if not df_eq_active.empty else 0.0
 eq_inv = df_eq_active["Invested_Value"].sum() if not df_eq_active.empty else 0.0
@@ -359,7 +300,7 @@ with st.container(border=True):
     nd_col1, nd_col2 = st.columns([3, 1])
     with nd_col1:
         st.progress(min(total_portfolio_val / INITIAL_LOAN, 1.0))
-        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target")
+        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active XIRR: **{console_xirr*100:.2f}%**")
     with nd_col2:
         st.metric("Net Debt Pending", format_inr(net_debt))
 
@@ -380,72 +321,59 @@ with sec2_hdr_col:
     st.subheader("2. Live Portfolio Holdings")
 
 with sec2_act_col:
-    with st.popover("📥 Import Tradebooks", use_container_width=True):
-        st.markdown("**Upload Monthly Tradebooks**")
+    with st.popover("📥 Import Holdings Excel", use_container_width=True):
+        st.markdown("**Import Zerodha Console Statement**")
+        
         uploaded_files = st.file_uploader(
-            "Select Zerodha CSVs", 
-            type=["csv"], 
+            "Select Holdings Excel File(s)", 
+            type=["xlsx", "xls"], 
             accept_multiple_files=True,
-            key="popover_uploader",
-            help="Upload tradebook-HEK312-MF.csv, tradebook-SDB789-EQ.csv, etc."
+            key="holdings_excel_uploader",
+            help="Upload holdings-SDB789.xlsx or holdings-HEK312.xlsx exported from Zerodha Console."
+        )
+
+        input_xirr = st.number_input(
+            "Console Overall XIRR (%)", 
+            min_value=0.0, 
+            max_value=100.0, 
+            value=float(console_xirr * 100), 
+            step=0.1,
+            help="Enter overall portfolio XIRR % shown on Zerodha Console dashboard."
         )
 
         if uploaded_files:
-            if st.button("Sync to Google Sheets", key="btn_popover_sync", use_container_width=True):
-                new_records = []
+            if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings", use_container_width=True):
+                parsed_records = []
                 
                 for file in uploaded_files:
-                    match = re.search(r'\b([A-Z0-9]{6})\b', file.name.upper())
-                    acc_id = match.group(1) if match else "SDB789"
+                    cid, df_parsed = parse_zerodha_holdings_excel(file)
+                    if not df_parsed.empty:
+                        parsed_records.append(df_parsed)
+                        st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}**")
+
+                if parsed_records:
+                    df_new_holdings = pd.concat(parsed_records, ignore_index=True)
+                    df_new_holdings.columns = [str(c).strip().lower() for c in df_new_holdings.columns]
                     
+                    # Deduplicate holdings by Symbol and Account
+                    df_deduped_holdings = df_new_holdings.drop_duplicates(subset=["symbol", "account"]).reset_index(drop=True)
+
+                    # Write Holdings to 'Portfolio_Tracker' tab
                     try:
-                        df_uploaded = pd.read_csv(file)
-                        df_uploaded.columns = [str(c).strip().lower() for c in df_uploaded.columns]
-                        df_uploaded = df_uploaded.loc[:, ~df_uploaded.columns.duplicated()]
+                        conn.update(worksheet="Portfolio_Tracker", data=df_deduped_holdings)
                         
-                        df_uploaded['account'] = acc_id
-                        new_records.append(df_uploaded)
-                        st.info(f"Parsed {len(df_uploaded)} trades for **{acc_id}** from `{file.name}`")
-                    except Exception as e:
-                        st.error(f"Error reading `{file.name}`: {e}")
+                        # Save XIRR to 'Loan_Settings' tab
+                        try:
+                            df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
+                            if df_settings.empty:
+                                df_settings = pd.DataFrame([{"Disbursed_Ratio": 0.90, "Handover_Completed": "FALSE", "Interest_Rate": 7.20, "Console_XIRR": input_xirr}])
+                            else:
+                                df_settings.at[0, "Console_XIRR"] = input_xirr
+                            conn.update(worksheet="Loan_Settings", data=df_settings)
+                        except Exception:
+                            pass
 
-                if new_records:
-                    df_new_combined = pd.concat(new_records, ignore_index=True)
-                    df_new_combined.columns = [str(c).strip().lower() for c in df_new_combined.columns]
-                    df_new_combined = df_new_combined.loc[:, ~df_new_combined.columns.duplicated()]
-                    
-                    df_existing = df_tradebook.copy()
-                    if not df_existing.empty:
-                        df_existing.columns = [str(c).strip().lower() for c in df_existing.columns]
-                        df_existing = df_existing.loc[:, ~df_existing.columns.duplicated()]
-                    
-                    df_all_merged = pd.concat([df_existing, df_new_combined], ignore_index=True)
-                    df_all_merged.columns = [str(c).strip().lower() for c in df_all_merged.columns]
-                    df_all_merged = df_all_merged.loc[:, ~df_all_merged.columns.duplicated()]
-                    
-                    sym_col = 'symbol' if 'symbol' in df_all_merged.columns else df_all_merged.columns[0]
-                    date_col = 'trade_date' if 'trade_date' in df_all_merged.columns else 'date'
-                    type_col = 'trade_type' if 'trade_type' in df_all_merged.columns else 'type'
-                    qty_col = 'quantity' if 'quantity' in df_all_merged.columns else 'qty'
-                    price_col = 'price' if 'price' in df_all_merged.columns else 'rate'
-                    trade_id_col = 'trade_id' if 'trade_id' in df_all_merged.columns else qty_col
-
-                    df_all_merged["unique_key"] = (
-                        df_all_merged["account"].astype(str) + "_" +
-                        df_all_merged[date_col].astype(str) + "_" +
-                        df_all_merged[sym_col].astype(str) + "_" +
-                        df_all_merged[type_col].astype(str) + "_" +
-                        df_all_merged[qty_col].astype(str) + "_" +
-                        df_all_merged[price_col].astype(str) + "_" +
-                        df_all_merged[trade_id_col].astype(str)
-                    )
-
-                    df_deduped = df_all_merged.drop_duplicates(subset=["unique_key"]).drop(columns=["unique_key"]).reset_index(drop=True)
-                    df_deduped = df_deduped.fillna("")
-
-                    try:
-                        conn.update(worksheet="Tradebook", data=df_deduped)
-                        st.success(f"🎉 Synced {len(df_deduped)} total unique trades!")
+                        st.success("🎉 Successfully synced active holdings and Console XIRR!")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
@@ -454,7 +382,7 @@ with sec2_act_col:
 # Section 2A: Equity & ETF Holdings
 st.markdown("#### 📊 Equity & ETF Holdings")
 if df_eq_active.empty:
-    st.info("No active Equity/ETF holdings found in 'Tradebook' tab.")
+    st.info("No active Equity/ETF holdings found in 'Portfolio_Tracker' tab.")
 else:
     for _, row in df_eq_active.iterrows():
         sym = row["Symbol"]
@@ -479,7 +407,7 @@ else:
 # Section 2B: Mutual Fund Holdings
 st.markdown("#### 💼 Mutual Fund Holdings")
 if df_mf_active.empty:
-    st.info("No active Mutual Fund holdings found in 'Tradebook' tab.")
+    st.info("No active Mutual Fund holdings found in 'Portfolio_Tracker' tab.")
 else:
     for _, row in df_mf_active.iterrows():
         sym = row["Symbol"]
