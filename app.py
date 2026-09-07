@@ -141,8 +141,10 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
     return default_nav
 
 # --- UNIVERSAL HOLDINGS PARSER (KITE CSV & CONSOLE EXCEL) ---
-def parse_zerodha_holdings_file(uploaded_file):
-    fname = uploaded_file.name.upper()
+def parse_zerodha_holdings_file(uploaded_file, filename=None):
+    file_name_str = filename if filename else getattr(uploaded_file, 'name', str(uploaded_file))
+    fname = file_name_str.upper()
+    
     match = re.search(r'\b([A-Z0-9]{6})\b', fname)
     filename_acc_id = match.group(1) if match else "SDB789"
     
