@@ -152,11 +152,9 @@ def solve_xirr(cash_flows, dates, guess=0.12):
     except Exception:
         return 0.12
 
-# --- MULTI-ACCOUNT ZERODHA TRADEBOOK PARSER (XIRR + AUTO HOLDINGS SYNC) ---
+# --- MULTI-FILE ZERODHA TRADEBOOK PARSER (UNIQUE KEY DEDUPLICATION) ---
 def process_zerodha_tradebooks(uploaded_files, df_portfolio_base):
-    all_cash_flows = []
-    all_dates = []
-    category_holdings = {cat: {"qty": 0.0, "invested": 0.0} for cat in df_portfolio_base["Category"].tolist()}
+    raw_rows = []
 
     for file in uploaded_files:
         try:
@@ -168,48 +166,76 @@ def process_zerodha_tradebooks(uploaded_files, df_portfolio_base):
             type_col = next((c for c in df.columns if 'type' in c), None)
             qty_col = next((c for c in df.columns if 'qty' in c or 'quantity' in c), None)
             price_col = next((c for c in df.columns if 'price' in c or 'rate' in c or 'value' in c), None)
+            id_col = next((c for c in df.columns if 'id' in c or 'order' in c or 'trade' in c), None)
 
             if date_col and type_col and qty_col and price_col:
                 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
                 df = df.dropna(subset=[date_col])
 
                 for _, row in df.iterrows():
+                    t_date = row[date_col].strftime("%Y-%m-%d %H:%M:%S") if pd.notna(row[date_col]) else ""
+                    sym = str(row[symbol_col]).strip().upper() if symbol_col and pd.notna(row[symbol_col]) else ""
                     t_type = str(row[type_col]).strip().lower()
                     qty = float(row[qty_col]) if not pd.isna(row[qty_col]) else 0.0
                     price = float(row[price_col]) if not pd.isna(row[price_col]) else 0.0
-                    trade_val = qty * price
+                    t_id = str(row[id_col]).strip() if id_col and pd.notna(row[id_col]) else ""
 
-                    if trade_val > 0:
-                        if t_type == 'buy':
-                            all_cash_flows.append(-trade_val)
-                            all_dates.append(row[date_col])
-                        elif t_type == 'sell':
-                            all_cash_flows.append(trade_val)
-                            all_dates.append(row[date_col])
+                    # Deduplication key generation
+                    unique_key = f"{t_date}_{sym}_{t_type}_{qty}_{price}_{t_id}"
 
-                    # Aggregate Holdings by Category
-                    if symbol_col and not pd.isna(row[symbol_col]):
-                        sym = str(row[symbol_col]).strip().upper()
-                        matched_cat = None
-                        for s_key, c_val in SYMBOL_MAP.items():
-                            if s_key in sym:
-                                matched_cat = c_val
-                                break
-                        
-                        if matched_cat in category_holdings:
-                            if t_type == 'buy':
-                                category_holdings[matched_cat]["qty"] += qty
-                                category_holdings[matched_cat]["invested"] += trade_val
-                            elif t_type == 'sell':
-                                category_holdings[matched_cat]["qty"] = max(0.0, category_holdings[matched_cat]["qty"] - qty)
-                                category_holdings[matched_cat]["invested"] = max(0.0, category_holdings[matched_cat]["invested"] - trade_val)
+                    raw_rows.append({
+                        "unique_key": unique_key,
+                        "date_dt": row[date_col],
+                        "symbol": sym,
+                        "type": t_type,
+                        "qty": qty,
+                        "price": price
+                    })
         except Exception:
             pass
 
-    if not all_cash_flows:
+    if not raw_rows:
         return None, None
 
-    # Construct Updated Portfolio DataFrame
+    # Deduplicate overlapping rows across 365-day exports
+    master_df = pd.DataFrame(raw_rows)
+    master_df = master_df.drop_duplicates(subset=["unique_key"])
+
+    all_cash_flows = []
+    all_dates = []
+    category_holdings = {cat: {"qty": 0.0, "invested": 0.0} for cat in df_portfolio_base["Category"].tolist()}
+
+    for _, row in master_df.iterrows():
+        t_type = row["type"]
+        qty = row["qty"]
+        price = row["price"]
+        trade_val = qty * price
+        sym = row["symbol"]
+
+        if trade_val > 0:
+            if t_type == 'buy':
+                all_cash_flows.append(-trade_val)
+                all_dates.append(row["date_dt"])
+            elif t_type == 'sell':
+                all_cash_flows.append(trade_val)
+                all_dates.append(row["date_dt"])
+
+        # Category mapping & unit aggregation
+        matched_cat = None
+        for s_key, c_val in SYMBOL_MAP.items():
+            if s_key in sym:
+                matched_cat = c_val
+                break
+        
+        if matched_cat in category_holdings:
+            if t_type == 'buy':
+                category_holdings[matched_cat]["qty"] += qty
+                category_holdings[matched_cat]["invested"] += trade_val
+            elif t_type == 'sell':
+                category_holdings[matched_cat]["qty"] = max(0.0, category_holdings[matched_cat]["qty"] - qty)
+                category_holdings[matched_cat]["invested"] = max(0.0, category_holdings[matched_cat]["invested"] - trade_val)
+
+    # Build updated portfolio
     updated_portfolio = df_portfolio_base.copy()
     for idx, row in updated_portfolio.iterrows():
         cat = row["Category"]
@@ -217,7 +243,6 @@ def process_zerodha_tradebooks(uploaded_files, df_portfolio_base):
             updated_portfolio.at[idx, "Units_Accumulated"] = category_holdings[cat]["qty"]
             updated_portfolio.at[idx, "Invested_Value"] = category_holdings[cat]["invested"]
 
-    # Calculate live valuation for XIRR terminal cash flow
     temp_val = (updated_portfolio["Units_Accumulated"] * updated_portfolio["Current_LTP"]).sum()
 
     combined_df = pd.DataFrame({"Date": all_dates, "CF": all_cash_flows}).sort_values("Date")
