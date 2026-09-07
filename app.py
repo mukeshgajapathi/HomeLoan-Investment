@@ -545,7 +545,7 @@ if is_manifest_mode:
     console_xirr = 13.6  # Fixed at 13.6% for Dec 2035 Manifestation Screen
 
     st.success(
-        "🙏 **December 2035 Manifestation Anchored:**\n"
+        "🙏 **Goal:**\n"
         "I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown more than home loan princple generating effortless financial peace and security."
     )
 
