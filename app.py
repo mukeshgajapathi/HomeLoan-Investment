@@ -115,7 +115,7 @@ def fetch_live_ltp(ticker, default_price=0.0):
 # --- FETCH LIVE MUTUAL FUND NAV VIA ISIN (MFAPI.IN) ---
 @st.cache_data(ttl=3600)
 def fetch_mf_nav_by_isin(isin, default_nav=0.0):
-    if not isin or str(isin).strip().upper() == "NAN":
+    if not isin or str(isin).strip().upper() in ["NAN", "NONE", ""]:
         return default_nav
     try:
         url_search = f"https://api.mfapi.in/mf/search?q={isin.strip()}"
@@ -162,7 +162,7 @@ def solve_xirr(cash_flows, dates, guess=0.12):
     except Exception:
         return 0.12
 
-# --- PROCESS TRADEBOOK WITH SEGMENT & ISIN RECOGNITION ---
+# --- PROCESS TRADEBOOK WITH ACCOUNT ID, SEGMENT & ISIN ---
 def process_tradebook_tab(df_tradebook):
     if df_tradebook.empty:
         return None, pd.DataFrame(), pd.DataFrame()
@@ -177,6 +177,13 @@ def process_tradebook_tab(df_tradebook):
     price_col = 'price' if 'price' in df_raw.columns else 'rate'
     seg_col = 'segment' if 'segment' in df_raw.columns else None
     isin_col = 'isin' if 'isin' in df_raw.columns else None
+
+    # Detect Account ID column
+    acc_col = None
+    for possible_acc in ['account', 'account_id', 'client_id', 'user', 'owner']:
+        if possible_acc in df_raw.columns:
+            acc_col = possible_acc
+            break
 
     if date_col in df_raw.columns:
         df_raw["Date_DT"] = pd.to_datetime(df_raw[date_col], errors="coerce")
@@ -195,8 +202,11 @@ def process_tradebook_tab(df_tradebook):
         
         raw_seg = str(row.get(seg_col, "")).strip().upper() if seg_col else ""
         isin_val = str(row.get(isin_col, "")).strip() if isin_col else ""
+        
+        # Read raw Account ID (e.g. HEK312 or SDB789)
+        acc_val = str(row.get(acc_col, "SDB789")).strip().upper() if acc_col else "SDB789"
+        if acc_val in ["NAN", "NONE", ""]: acc_val = "SDB789"
 
-        # Asset Class Segmentation (EQ vs MF)
         if raw_seg == 'MF' or any(kw in sym for kw in ['DIRECT', 'GROWTH', 'MUTUAL', 'FUND', 'OPTION']):
             asset_class = "Mutual Fund"
         else:
@@ -212,8 +222,12 @@ def process_tradebook_tab(df_tradebook):
             cash_flows.append(trade_val)
             dates.append(row["Date_DT"])
 
-        if sym not in holdings:
-            holdings[sym] = {
+        holding_key = (sym, acc_val)
+
+        if holding_key not in holdings:
+            holdings[holding_key] = {
+                "symbol": sym,
+                "account": acc_val,
                 "qty": 0.0, 
                 "invested": 0.0, 
                 "avg_cost": 0.0, 
@@ -222,10 +236,9 @@ def process_tradebook_tab(df_tradebook):
                 "isin": isin_val
             }
 
-        h = holdings[sym]
+        h = holdings[holding_key]
         h["last_price"] = price
 
-        # Weighted Average Cost Accounting
         if t_type == 'buy':
             h["qty"] += qty
             h["invested"] += trade_val
@@ -240,15 +253,13 @@ def process_tradebook_tab(df_tradebook):
                 else:
                     h["invested"] = h["qty"] * h["avg_cost"]
 
-    # Active Holdings Construction
     eq_rows = []
     mf_rows = []
     total_active_val = 0.0
 
-    for sym, data in holdings.items():
+    for (sym, acc), data in holdings.items():
         if data["qty"] > 0 and data["invested"] > 0:
             if data["asset_class"] == "Mutual Fund":
-                # Fetch Live NAV via ISIN
                 live_nav = fetch_mf_nav_by_isin(data["isin"], default_nav=data["last_price"])
                 curr_val = data["qty"] * live_nav
                 pnl = curr_val - data["invested"]
@@ -256,6 +267,7 @@ def process_tradebook_tab(df_tradebook):
 
                 mf_rows.append({
                     "Symbol": sym,
+                    "Account": data["account"],
                     "ISIN": data["isin"],
                     "Units_Accumulated": data["qty"],
                     "Avg_Cost": data["avg_cost"],
@@ -265,7 +277,6 @@ def process_tradebook_tab(df_tradebook):
                     "P&L (₹)": pnl
                 })
             else:
-                # Fetch Live LTP via Yahoo Finance
                 ticker = TICKER_MAP.get(sym, f"{sym}.NS")
                 ltp = fetch_live_ltp(ticker, default_price=data["last_price"])
                 curr_val = data["qty"] * ltp
@@ -274,6 +285,7 @@ def process_tradebook_tab(df_tradebook):
 
                 eq_rows.append({
                     "Symbol": sym,
+                    "Account": data["account"],
                     "ISIN": data["isin"],
                     "Units_Accumulated": data["qty"],
                     "Avg_Cost": data["avg_cost"],
@@ -307,7 +319,6 @@ def load_data():
 df_tradebook = load_data()
 computed_xirr, df_eq_active, df_mf_active = process_tradebook_tab(df_tradebook)
 
-# Totals across EQ and MF
 eq_val = df_eq_active["Current_Value"].sum() if not df_eq_active.empty else 0.0
 eq_inv = df_eq_active["Invested_Value"].sum() if not df_eq_active.empty else 0.0
 mf_val = df_mf_active["Current_Value"].sum() if not df_mf_active.empty else 0.0
@@ -320,7 +331,7 @@ overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfo
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
-# Summary Visualizer
+# Summary Section
 with st.container(border=True):
     st.subheader("🎯 Net-Debt-Zero Visualizer")
     net_debt = max(0.0, INITIAL_LOAN - total_portfolio_val)
@@ -352,6 +363,7 @@ if df_eq_active.empty:
 else:
     for _, row in df_eq_active.iterrows():
         sym = row["Symbol"]
+        acc = row["Account"]
         units = row["Units_Accumulated"]
         ltp = row["Current_LTP"]
         inv = row["Invested_Value"]
@@ -360,7 +372,10 @@ else:
         pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
         
         with st.container(border=True):
-            st.markdown(f"**{sym}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", unsafe_allow_html=True)
+            st.markdown(
+                f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", 
+                unsafe_allow_html=True
+            )
             m1, m2, m3 = st.columns(3)
             m1.metric("Invested", format_inr(inv))
             m2.metric("Current Value", format_inr(curr))
@@ -373,6 +388,7 @@ if df_mf_active.empty:
 else:
     for _, row in df_mf_active.iterrows():
         sym = row["Symbol"]
+        acc = row["Account"]
         units = row["Units_Accumulated"]
         ltp = row["Current_LTP"]
         inv = row["Invested_Value"]
@@ -381,7 +397,10 @@ else:
         pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
         
         with st.container(border=True):
-            st.markdown(f"**{sym}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", unsafe_allow_html=True)
+            st.markdown(
+                f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", 
+                unsafe_allow_html=True
+            )
             m1, m2, m3 = st.columns(3)
             m1.metric("Invested", format_inr(inv))
             m2.metric("Current Value", format_inr(curr))
