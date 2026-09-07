@@ -2,6 +2,4 @@ streamlit
 pandas
 yfinance
 st-gsheets-connection
-gspread
-kiteconnect
 openpyxl
