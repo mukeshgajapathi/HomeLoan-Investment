@@ -153,57 +153,61 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None):
 
     # CASE A: Zerodha Console Excel Statement (.xlsx / .xls)
     if fname.endswith(('.XLSX', '.XLS')):
-        xls = pd.ExcelFile(uploaded_file)
-        sheets = xls.sheet_names
-        sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
-        df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
-        
-        for r in range(min(15, len(df_raw))):
-            row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
-            if 'Client ID' in row_vals:
-                idx = row_vals.index('Client ID')
-                if idx + 1 < len(row_vals):
-                    client_id = row_vals[idx + 1].upper()
-                    
-        header_idx = -1
-        for r in range(len(df_raw)):
-            row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
-            if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
-                header_idx = r
-                break
-                
-        if header_idx != -1:
-            headers = [safe_str(x) for x in df_raw.iloc[header_idx].values]
-            df_data = df_raw.iloc[header_idx+1:].copy()
-            df_data.columns = headers
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            sheets = xls.sheet_names
+            sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
+            df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
             
-            for _, row in df_data.iterrows():
-                sym = safe_str(row.get('Symbol', ''))
-                if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
-                    continue
+            for r in range(min(15, len(df_raw))):
+                row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
+                if 'Client ID' in row_vals:
+                    idx = row_vals.index('Client ID')
+                    if idx + 1 < len(row_vals):
+                        client_id = row_vals[idx + 1].upper()
+                        
+            header_idx = -1
+            for r in range(len(df_raw)):
+                row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
+                if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
+                    header_idx = r
+                    break
                     
-                qty = safe_float(row.get('Quantity Available', 0.0))
-                avg_price = safe_float(row.get('Average Price', 0.0))
-                ltp = safe_float(row.get('Previous Closing Price', 0.0))
-                isin = safe_str(row.get('ISIN', ''))
-                inst_type = safe_str(row.get('Instrument Type', ''))
+            if header_idx != -1:
+                headers = [safe_str(x) for x in df_raw.iloc[header_idx].values]
+                df_data = df_raw.iloc[header_idx+1:].copy()
+                df_data.columns = headers
                 
-                asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
-                clean_sym = sym.replace('-E', '').strip()
-                
-                if qty > 0:
-                    records.append({
-                        "Account": client_id,
-                        "Symbol": clean_sym,
-                        "ISIN": isin,
-                        "Asset_Class": asset_class,
-                        "Units_Accumulated": qty,
-                        "Avg_Cost": avg_price,
-                        "Current_LTP": ltp,
-                        "Invested_Value": round(qty * avg_price, 2),
-                        "Current_Value": round(qty * ltp, 2),
-                        "P&L (₹)": round(qty * (ltp - avg_price), 2)
-                    })
+                for _, row in df_data.iterrows():
+                    sym = safe_str(row.get('Symbol', ''))
+                    if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
+                        continue
+                        
+                    qty = safe_float(row.get('Quantity Available', 0.0))
+                    avg_price = safe_float(row.get('Average Price', 0.0))
+                    ltp = safe_float(row.get('Previous Closing Price', 0.0))
+                    isin = safe_str(row.get('ISIN', ''))
+                    inst_type = safe_str(row.get('Instrument Type', ''))
+                    
+                    asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
+                    clean_sym = sym.replace('-E', '').strip()
+                    
+                    if qty > 0:
+                        records.append({
+                            "Account": client_id,
+                            "Symbol": clean_sym,
+                            "ISIN": isin,
+                            "Asset_Class": asset_class,
+                            "Units_Accumulated": qty,
+                            "Avg_Cost": avg_price,
+                            "Current_LTP": ltp,
+                            "Invested_Value": round(qty * avg_price, 2),
+                            "Current_Value": round(qty * ltp, 2),
+                            "P&L (₹)": round(qty * (ltp - avg_price), 2)
+                        })
+        except ImportError:
+            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            return client_id, pd.DataFrame()
 
     # CASE B: Zerodha Kite / Console Holdings CSV (.csv)
     elif fname.endswith('.CSV'):
@@ -577,7 +581,7 @@ with m_col1:
             
             can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
             
-            if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary", use_container_width=True):
+            if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary"):
                 updated_settings = pd.DataFrame([{
                     "Disbursed_Ratio": new_ratio,
                     "Handover_Completed": (new_ratio == 1.0),
@@ -598,7 +602,7 @@ with m_col2:
             step=0.05, 
             format="%.2f"
         )
-        if st.button("💾 Save New Rate", type="primary", use_container_width=True):
+        if st.button("💾 Save New Rate", type="primary"):
             updated_settings = pd.DataFrame([{
                 "Disbursed_Ratio": disbursed_ratio,
                 "Handover_Completed": is_handover_completed,
@@ -635,7 +639,7 @@ with st.form("emi_form", clear_on_submit=True):
         else:
             st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
 
-    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid, use_container_width=True):
+    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
         new_row = pd.DataFrame([{
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
             "Month_Year": current_month_str, 
@@ -672,7 +676,7 @@ with sec2_hdr_col:
     st.subheader("2. Live Portfolio Holdings")
 
 with sec2_act_col:
-    with st.popover("📥 Import Holdings File(s)", use_container_width=True):
+    with st.popover("📥 Import Holdings File(s)"):
         st.markdown("**Import Zerodha Holdings (CSV or Excel)**")
         
         uploaded_files = st.file_uploader(
@@ -693,7 +697,7 @@ with sec2_act_col:
             help="Enter overall portfolio XIRR % from Zerodha Console. Negative, zero, and positive values are allowed."
         )
 
-        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings", use_container_width=True):
+        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings"):
             if input_xirr is None:
                 st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
             elif not uploaded_files:
@@ -918,7 +922,7 @@ else:
 
     st.metric("Tenure Reduced By", f"{int(months_saved)} Months", f"~ {months_saved/12:.1f} Years saved")
 
-    if st.button("Execute Strategy Action & Log to Sheet", disabled=not enable_pp, type="primary", use_container_width=True):
+    if st.button("Execute Strategy Action & Log to Sheet", disabled=not enable_pp, type="primary"):
         new_row = pd.DataFrame([{
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
             "Month_Year": datetime.now().strftime("%b %Y"), 
@@ -953,13 +957,12 @@ if not df_inv_log.empty:
             
             st.line_chart(
                 df_monthly_chart,
-                color=["#FF4B4B", "#00CC96"],
-                use_container_width=True
+                color=["#FF4B4B", "#00CC96"]
             )
             
             with st.expander("📜 View Monthly Growth Log Table"):
-                st.dataframe(df_monthly, use_container_width=True, hide_index=True)
-    except Exception as e:
+                st.dataframe(df_monthly, hide_index=True)
+    except Exception:
         st.info("Log portfolio updates to start building your historical growth chart!")
 else:
     st.info("No historical snapshots recorded yet. Import holdings to record your first snapshot.")
