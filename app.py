@@ -596,6 +596,15 @@ if is_manifest_mode:
     random_abraham_quote = random.choice(abraham_quotes)
 
     with st.container(border=True):
+        st.markdown("### 📖 Sacred Scripture")
+        st.warning(
+            "✝️ **Matthew 7:7-8**\n\n"
+            "“Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you: "
+            "For every one that asketh receiveth; and he that seeketh findeth; and to him that knocketh it shall be opened.”"
+        )
+
+        st.divider()
+
         st.markdown("### ✨ Abraham Hicks Vibrational Affirmation")
         st.info(f"💫 **“{random_abraham_quote}”**")
         
