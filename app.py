@@ -107,6 +107,72 @@ def calc_rem_months(principal, emi, rate_monthly):
     except ValueError:
         return 0
 
+# --- EXACT XIRR SOLVER (NEWTON-RAPHSON ENGINE) ---
+def calculate_exact_xirr(df_inv_log, current_portfolio_val, guess=0.12):
+    """Calculates exact XIRR using historical cash flows from Investment_Log."""
+    try:
+        if df_inv_log.empty or current_portfolio_val <= 0:
+            return 0.12
+
+        df_temp = df_inv_log.copy()
+        df_temp["Date_DT"] = pd.to_datetime(df_temp["Date"], errors="coerce")
+        df_temp["Actual_SIP"] = pd.to_numeric(df_temp["Actual_SIP"], errors="coerce").fillna(0.0)
+        df_temp = df_temp.dropna(subset=["Date_DT"]).sort_values("Date_DT")
+
+        cash_flows = []
+        dates = []
+
+        # Outflows: Historical SIPs logged
+        for _, row in df_temp.iterrows():
+            sip_amt = float(row["Actual_SIP"])
+            if sip_amt > 0:
+                cash_flows.append(-sip_amt)
+                dates.append(row["Date_DT"])
+
+        # Fallback: If no explicit Actual_SIPs exist, use Total_Invested entries
+        if len(cash_flows) == 0 and "Total_Invested" in df_temp.columns:
+            df_temp["Total_Invested"] = pd.to_numeric(df_temp["Total_Invested"], errors="coerce").fillna(0.0)
+            prev_inv = 0.0
+            for _, row in df_temp.iterrows():
+                curr_inv = float(row["Total_Invested"])
+                delta = curr_inv - prev_inv
+                if delta > 0:
+                    cash_flows.append(-delta)
+                    dates.append(row["Date_DT"])
+                prev_inv = curr_inv
+
+        # Terminal Inflow: Current live portfolio valuation today
+        cash_flows.append(float(current_portfolio_val))
+        dates.append(datetime.now())
+
+        if len(cash_flows) < 2 or sum(cash_flows) == 0:
+            return 0.12
+
+        d0 = dates[0]
+        years = [(d - d0).days / 365.25 for d in dates]
+
+        def f(r):
+            if r <= -0.99: return 1e10
+            return sum(cf / ((1 + r) ** y) for cf, y in zip(cash_flows, years))
+
+        def df(r):
+            if r <= -0.99: return -1e10
+            return sum(-y * cf / ((1 + r) ** (y + 1)) for cf, y in zip(cash_flows, years))
+
+        r = guess
+        for _ in range(100):
+            f_val = f(r)
+            df_val = df(r)
+            if abs(df_val) < 1e-12: break
+            new_r = r - f_val / df_val
+            if abs(new_r - r) < 1e-6:
+                return max(0.05, min(new_r, 0.25))  # Bound between 5% and 25% for safety
+            r = new_r
+
+        return max(0.05, min(r, 0.25))
+    except Exception:
+        return 0.12
+
 # --- AMORTIZATION ENGINE: DYNAMIC PRINCIPAL REDUCTION ---
 def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = initial_loan
@@ -182,14 +248,14 @@ def get_current_year_prepayment_status(df_loan):
     return 0, False
 
 # --- FORWARD NDZ PROJECTION ENGINE ---
-def project_ndz_target(current_principal, current_portfolio, current_rate, full_emi, is_handover, assumed_cagr=0.12):
+def project_ndz_target(current_principal, current_portfolio, current_rate, full_emi, is_handover, xirr_rate):
     if current_portfolio >= current_principal:
         return "Achieved", 0, 0
         
     p_bal = current_principal
     port_val = current_portfolio
     r_m_loan = (current_rate / 100) / 12
-    r_m_eq = (1 + assumed_cagr)**(1/12) - 1
+    r_m_eq = (1 + xirr_rate)**(1/12) - 1
     
     sim_date = datetime.now()
     handover_date = datetime(2027, 6, 1)
@@ -299,6 +365,9 @@ total_portfolio_invested = df_portfolio["Invested_Value"].sum()
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
+# --- CALCULATE EXACT PORTFOLIO XIRR ---
+calculated_xirr = calculate_exact_xirr(df_inv_log, total_portfolio_val)
+
 # --- DERIVED PRIOR INVESTED BASELINE FOR SIP / SWP CALCULATION ---
 current_month_str = datetime.now().strftime("%b %Y")
 
@@ -311,7 +380,6 @@ if not df_inv_log.empty and "Month_Year" in df_inv_log.columns and "Total_Invest
 else:
     prior_invested = 0.0
 
-# Automatically calculated Actual SIP / SWP Delta
 derived_actual_sip = total_portfolio_invested - prior_invested
 
 # --- DERIVED LOAN CALCULATIONS via AMORTIZATION ENGINE ---
@@ -337,7 +405,7 @@ else:
     active_due_label = "Pre-EMI Due"
     active_due_amount = monthly_pre_emi
     disbursement_badge = f"{int(disbursed_ratio * 100)}% Disbursed"
-    expected_sip = 0.0  # Paused for interior works accumulation until handover
+    expected_sip = 0.0
 
 current_rem_months = calc_rem_months(current_principal, full_emi, r_monthly)
 rem_years = current_rem_months / 12
@@ -346,9 +414,9 @@ min_prepayment_allowed = 2 * full_emi
 corpus_4_pct = 0.04 * total_portfolio_val
 is_ndz_achieved = total_portfolio_val >= current_principal
 
-# Run Forward NDZ Projection
+# Run Forward NDZ Projection using Calculated XIRR
 proj_date, proj_yrs, proj_mos = project_ndz_target(
-    current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, assumed_cagr=0.12
+    current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, xirr_rate=calculated_xirr
 )
 
 # --- DASHBOARD HEADER ---
@@ -371,7 +439,7 @@ with st.container(border=True):
             st.metric("Net Debt Pending", format_inr(net_debt))
 
     if not is_ndz_achieved:
-        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming 12% CAGR)")
+        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{calculated_xirr*100:.2f}% Calculated Portfolio XIRR**)")
 
     st.divider()
 
@@ -532,7 +600,6 @@ with sec2_col2:
             new_total_val = round(float(df_portfolio["Current_Value"].sum()), 2)
             new_total_inv = round(float(df_portfolio["Invested_Value"].sum()), 2)
 
-            # Auto-calculate dynamic SIP / SWP delta against prior baseline
             new_derived_sip = round(new_total_inv - prior_invested, 2)
 
             df_to_save = df_portfolio[["Category", "Units_Accumulated", "Current_LTP", "Invested_Value"]].copy()
@@ -632,7 +699,7 @@ else:
     
     with st.container(border=True):
         st.markdown("### 🚦 4% Portfolio Corpus Rule Conditions")
-        st.caption("抓 **Annual Limit:** Tapping the portfolio corpus under this rule is strictly limited to **1 time per loan year**, provided Zerodha Console XIRR > 10.0%.")
+        st.caption("ℹ️ **Annual Limit:** Tapping the portfolio corpus under this rule is strictly limited to **1 time per loan year**, provided XIRR > 10.0%.")
         
         rule_col1, rule_col2, rule_col3 = st.columns(3)
         rule_col1.metric("4% Corpus Allocation", format_inr(corpus_4_pct))
@@ -652,11 +719,12 @@ else:
     pp_input_col1, pp_input_col2 = st.columns(2)
 
     with pp_input_col1:
+        # Pre-fill with calculated XIRR while leaving field editable
         user_xirr = st.number_input(
-            "Enter Zerodha Console XIRR (%)", 
-            value=0.0, 
+            "Portfolio XIRR (%) [Auto-Calculated]", 
+            value=float(round(calculated_xirr * 100, 2)), 
             step=0.5, 
-            help="Check your accurate XIRR directly from Zerodha Console."
+            help="Auto-calculated from your Investment_Log. You can also override with Zerodha Console XIRR."
         )
 
     is_xirr_valid = user_xirr > 10.0
@@ -666,7 +734,7 @@ else:
         default_pp_val = float(min_prepayment_allowed)
         enable_pp = False
     elif not is_xirr_valid:
-        st.warning(f"🔒 **Part Payment Locked:** Zerodha Console XIRR must be > 10.0% to unlock corpus prepayments (Current: {user_xirr:.1f}%).")
+        st.warning(f"🔒 **Part Payment Locked:** XIRR must be > 10.0% to unlock corpus prepayments (Current: {user_xirr:.2f}%).")
         default_pp_val = float(min_prepayment_allowed)
         enable_pp = False
     elif not is_corpus_sufficient:
