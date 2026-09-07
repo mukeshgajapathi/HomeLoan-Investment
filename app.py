@@ -14,6 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- SECURITY / LOGIN WRAPPER ---
 def check_password():
     def password_entered():
         correct_password = str(st.secrets.get("APP_PASSWORD", st.secrets.get("theme", {}).get("APP_PASSWORD", "")))
@@ -39,6 +40,7 @@ def check_password():
 if not check_password():
     st.stop()
 
+# --- HELPER: INDIAN CURRENCY FORMATTER ---
 def format_inr(value):
     try:
         is_negative = value < 0
@@ -56,21 +58,29 @@ def format_inr(value):
     except ValueError:
         return "₹0"
 
-EXACT_ETF_MAP = {
-    "NIFTYBEES": "NIFTY 50",
-    "HDFCNIFETF": "NIFTY 50",
-    "JUNIORBEES": "Next 50",
-    "NEXT50": "Next 50",
-    "GOLDBEES": "GOLD",
-    "LIQUIDBEES": "Liquid",
-    "LIQUIDCASE": "Liquid"
+# --- YAHOO FINANCE TICKER MAP FOR ETFS ---
+TICKER_MAP = {
+    "NIFTYBEES": "NIFTYBEES.NS",
+    "HDFCNIFETF": "HDFCNIFETF.NS",
+    "JUNIORBEES": "JUNIORBEES.NS",
+    "NEXT50": "NEXT50.NS",
+    "GOLDBEES": "GOLDBEES.NS",
+    "LIQUIDBEES": "LIQUIDBEES.NS",
+    "LIQUIDCASE": "LIQUIDCASE.NS",
+    "AUTOBEES": "AUTOBEES.NS",
+    "BANKETF": "BANKETF.NS",
+    "ITBEES": "ITBEES.NS",
+    "PHARMABEES": "PHARMABEES.NS",
+    "FMCGIETF": "FMCGIETF.NS",
+    "SILVER": "SILVERBEES.NS",
+    "NIFTYIETF": "NIFTYIETF.NS",
+    "MIDCAPETF": "MID150BEES.NS"
 }
 
 EXCLUDE_KEYWORDS = ["FUT", "CE", "PE", "MCX", "GOLDPETAL", "GOLDGUINEA", "CRUDEOIL", "CALL", "PUT", "OPT", "FUTURES"]
 
 def is_equity_or_etf(symbol_str):
     sym = str(symbol_str).upper()
-    # Exclude option codes like 24OCT26000CE or 26APR22000PE
     if re.search(r'\b\d{2}[A-Z]{3}\b', sym) or re.search(r'\d+(CE|PE)\b', sym):
         return False
     for kw in EXCLUDE_KEYWORDS:
@@ -78,20 +88,10 @@ def is_equity_or_etf(symbol_str):
             return False
     return True
 
+# --- FETCH LIVE ETF / STOCK PRICES ---
 @st.cache_data(ttl=1800)
-def fetch_live_ltp(ticker):
-    if ticker.startswith("AMFI:"):
-        scheme_code = ticker.split(":")[1]
-        try:
-            url = f"https://api.mfapi.in/mf/{scheme_code}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode())
-                if "data" in data and len(data["data"]) > 0:
-                    return float(data["data"][0]["nav"])
-        except Exception:
-            return None
-
+def fetch_live_ltp(ticker, default_price=0.0):
+    if not ticker: return default_price
     try:
         data = yf.Ticker(ticker)
         try:
@@ -110,17 +110,31 @@ def fetch_live_ltp(ticker):
                     return val
     except Exception:
         pass
-    return None
+    return default_price
 
-def calc_rem_months(principal, emi, rate_monthly):
-    if principal <= 0: return 0
+# --- FETCH LIVE MUTUAL FUND NAV VIA ISIN (MFAPI.IN) ---
+@st.cache_data(ttl=3600)
+def fetch_mf_nav_by_isin(isin, default_nav=0.0):
+    if not isin or str(isin).strip().upper() == "NAN":
+        return default_nav
     try:
-        val = 1 - (principal * rate_monthly / emi)
-        if val <= 0: return 9999 
-        return -math.log(val) / math.log(1 + rate_monthly)
-    except ValueError:
-        return 0
+        url_search = f"https://api.mfapi.in/mf/search?q={isin.strip()}"
+        req = urllib.request.Request(url_search, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            if isinstance(data, list) and len(data) > 0:
+                scheme_code = data[0]['schemeCode']
+                url_nav = f"https://api.mfapi.in/mf/{scheme_code}"
+                req_nav = urllib.request.Request(url_nav, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req_nav, timeout=5) as resp_nav:
+                    nav_json = json.loads(resp_nav.read().decode())
+                    if "data" in nav_json and len(nav_json["data"]) > 0:
+                        return float(nav_json["data"][0]["nav"])
+    except Exception:
+        pass
+    return default_nav
 
+# --- NEWTON-RAPHSON XIRR SOLVER ---
 def solve_xirr(cash_flows, dates, guess=0.12):
     try:
         if len(cash_flows) < 2 or sum(cash_flows) == 0: return 0.12
@@ -148,26 +162,45 @@ def solve_xirr(cash_flows, dates, guess=0.12):
     except Exception:
         return 0.12
 
-def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
-    if df_raw_trades.empty:
-        return None, df_portfolio_base, pd.DataFrame()
+# --- PROCESS TRADEBOOK WITH SEGMENT & ISIN RECOGNITION ---
+def process_tradebook_tab(df_tradebook):
+    if df_tradebook.empty:
+        return None, pd.DataFrame(), pd.DataFrame()
 
-    etf_categories = {cat: {"qty": 0.0, "invested": 0.0} for cat in df_portfolio_base["Category"].tolist()}
-    mf_holdings = {}
+    df_raw = df_tradebook.copy()
+    df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
+
+    sym_col = 'symbol' if 'symbol' in df_raw.columns else df_raw.columns[0]
+    date_col = 'trade_date' if 'trade_date' in df_raw.columns else 'date'
+    type_col = 'trade_type' if 'trade_type' in df_raw.columns else 'type'
+    qty_col = 'quantity' if 'quantity' in df_raw.columns else 'qty'
+    price_col = 'price' if 'price' in df_raw.columns else 'rate'
+    seg_col = 'segment' if 'segment' in df_raw.columns else None
+    isin_col = 'isin' if 'isin' in df_raw.columns else None
+
+    if date_col in df_raw.columns:
+        df_raw["Date_DT"] = pd.to_datetime(df_raw[date_col], errors="coerce")
+        df_raw = df_raw.dropna(subset=["Date_DT"]).sort_values("Date_DT")
+
+    holdings = {}
     cash_flows = []
     dates = []
 
-    df_raw = df_raw_trades.copy()
-    if "Date" in df_raw.columns:
-        df_raw["Date_DT"] = pd.to_datetime(df_raw["Date"], errors="coerce")
-        df_raw = df_raw.dropna(subset=["Date_DT"]).sort_values("Date_DT")
-
     for _, row in df_raw.iterrows():
-        sym = str(row.get("Symbol", "")).strip().upper()
-        t_type = str(row.get("Type", "")).strip().lower()
-        qty = float(row.get("Quantity", 0.0))
-        price = float(row.get("Price", 0.0))
-        trade_val = float(row.get("Value", qty * price))
+        sym = str(row.get(sym_col, "")).strip().upper()
+        t_type = str(row.get(type_col, "")).strip().lower()
+        qty = float(row.get(qty_col, 0.0))
+        price = float(row.get(price_col, 0.0))
+        trade_val = qty * price
+        
+        raw_seg = str(row.get(seg_col, "")).strip().upper() if seg_col else ""
+        isin_val = str(row.get(isin_col, "")).strip() if isin_col else ""
+
+        # Asset Class Segmentation (EQ vs MF)
+        if raw_seg == 'MF' or any(kw in sym for kw in ['DIRECT', 'GROWTH', 'MUTUAL', 'FUND', 'OPTION']):
+            asset_class = "Mutual Fund"
+        else:
+            asset_class = "Equity / ETF"
 
         if not is_equity_or_etf(sym) or trade_val <= 0:
             continue
@@ -179,128 +212,115 @@ def process_raw_trades_tab(df_raw_trades, df_portfolio_base):
             cash_flows.append(trade_val)
             dates.append(row["Date_DT"])
 
-        matched_etf_cat = None
-        for etf_key, cat_name in EXACT_ETF_MAP.items():
-            if etf_key in sym:
-                matched_etf_cat = cat_name
-                break
+        if sym not in holdings:
+            holdings[sym] = {
+                "qty": 0.0, 
+                "invested": 0.0, 
+                "avg_cost": 0.0, 
+                "last_price": price,
+                "asset_class": asset_class,
+                "isin": isin_val
+            }
 
-        if matched_etf_cat and matched_etf_cat in etf_categories:
-            if t_type == 'buy':
-                etf_categories[matched_etf_cat]["qty"] += qty
-                etf_categories[matched_etf_cat]["invested"] += trade_val
-            elif t_type == 'sell':
-                etf_categories[matched_etf_cat]["qty"] = max(0.0, etf_categories[matched_etf_cat]["qty"] - qty)
-                etf_categories[matched_etf_cat]["invested"] = max(0.0, etf_categories[matched_etf_cat]["invested"] - trade_val)
-        else:
-            mf_key = sym.split('-')[0].strip()
-            if mf_key not in mf_holdings:
-                mf_holdings[mf_key] = {"qty": 0.0, "invested": 0.0, "last_price": price}
-            if t_type == 'buy':
-                mf_holdings[mf_key]["qty"] += qty
-                mf_holdings[mf_key]["invested"] += trade_val
-                mf_holdings[mf_key]["last_price"] = price
-            elif t_type == 'sell':
-                mf_holdings[mf_key]["qty"] = max(0.0, mf_holdings[mf_key]["qty"] - qty)
-                mf_holdings[mf_key]["invested"] = max(0.0, mf_holdings[mf_key]["invested"] - trade_val)
+        h = holdings[sym]
+        h["last_price"] = price
 
-    updated_portfolio = df_portfolio_base.copy()
-    # Reset accumulated units and invested values before accumulating from scratch
-    updated_portfolio["Units_Accumulated"] = 0.0
-    updated_portfolio["Invested_Value"] = 0.0
+        # Weighted Average Cost Accounting
+        if t_type == 'buy':
+            h["qty"] += qty
+            h["invested"] += trade_val
+            if h["qty"] > 0:
+                h["avg_cost"] = h["invested"] / h["qty"]
+        elif t_type == 'sell':
+            if h["qty"] > 0:
+                h["qty"] = max(0.0, h["qty"] - qty)
+                if h["qty"] == 0:
+                    h["invested"] = 0.0
+                    h["avg_cost"] = 0.0
+                else:
+                    h["invested"] = h["qty"] * h["avg_cost"]
 
-    for idx, row in updated_portfolio.iterrows():
-        cat = row["Category"]
-        if cat in etf_categories:
-            updated_portfolio.at[idx, "Units_Accumulated"] = etf_categories[cat]["qty"]
-            updated_portfolio.at[idx, "Invested_Value"] = etf_categories[cat]["invested"]
-
+    # Active Holdings Construction
+    eq_rows = []
     mf_rows = []
-    for mf_name, data in mf_holdings.items():
-        if data["invested"] > 0 and data["qty"] > 0:
-            mf_rows.append({
-                "Category": mf_name,
-                "Units_Accumulated": data["qty"],
-                "Current_LTP": data["last_price"],
-                "Invested_Value": data["invested"],
-                "Current_Value": data["qty"] * data["last_price"],
-                "P&L (₹)": (data["qty"] * data["last_price"]) - data["invested"]
-            })
-    df_mf_portfolio = pd.DataFrame(mf_rows)
+    total_active_val = 0.0
 
-    etf_val = (updated_portfolio["Units_Accumulated"] * updated_portfolio["Current_LTP"]).sum()
-    mf_val = df_mf_portfolio["Current_Value"].sum() if not df_mf_portfolio.empty else 0.0
-    total_val = etf_val + mf_val
+    for sym, data in holdings.items():
+        if data["qty"] > 0 and data["invested"] > 0:
+            if data["asset_class"] == "Mutual Fund":
+                # Fetch Live NAV via ISIN
+                live_nav = fetch_mf_nav_by_isin(data["isin"], default_nav=data["last_price"])
+                curr_val = data["qty"] * live_nav
+                pnl = curr_val - data["invested"]
+                total_active_val += curr_val
+
+                mf_rows.append({
+                    "Symbol": sym,
+                    "ISIN": data["isin"],
+                    "Units_Accumulated": data["qty"],
+                    "Avg_Cost": data["avg_cost"],
+                    "Current_LTP": live_nav,
+                    "Invested_Value": data["invested"],
+                    "Current_Value": curr_val,
+                    "P&L (₹)": pnl
+                })
+            else:
+                # Fetch Live LTP via Yahoo Finance
+                ticker = TICKER_MAP.get(sym, f"{sym}.NS")
+                ltp = fetch_live_ltp(ticker, default_price=data["last_price"])
+                curr_val = data["qty"] * ltp
+                pnl = curr_val - data["invested"]
+                total_active_val += curr_val
+
+                eq_rows.append({
+                    "Symbol": sym,
+                    "ISIN": data["isin"],
+                    "Units_Accumulated": data["qty"],
+                    "Avg_Cost": data["avg_cost"],
+                    "Current_LTP": ltp,
+                    "Invested_Value": data["invested"],
+                    "Current_Value": curr_val,
+                    "P&L (₹)": pnl
+                })
+
+    df_eq_active = pd.DataFrame(eq_rows)
+    df_mf_active = pd.DataFrame(mf_rows)
 
     if cash_flows:
-        cash_flows.append(float(total_val if total_val > 0 else 1.0))
+        cash_flows.append(float(total_active_val if total_active_val > 0 else 1.0))
         dates.append(datetime.now())
         computed_xirr = solve_xirr(cash_flows, dates)
     else:
         computed_xirr = None
 
-    return computed_xirr, updated_portfolio, df_mf_portfolio
+    return computed_xirr, df_eq_active, df_mf_active
 
-TICKERS = {
-    "Next 50": "NEXT50.NS", 
-    "NIFTY 50": "NIFTYBEES.NS", 
-    "GOLD": "GOLDBEES.NS", 
-    "Liquid": "LIQUIDBEES.NS"
-}
 INITIAL_LOAN = 4890000.0
-LOAN_TENURE_YEARS = 30
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    try: df_loan = conn.read(worksheet="Loan_Tracker", ttl=0)
-    except Exception: df_loan = pd.DataFrame()
-        
-    try: df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=0)
-    except Exception: df_portfolio = pd.DataFrame()
-        
-    try: df_raw_trades = conn.read(worksheet="Raw_Trades", ttl=0)
-    except Exception: df_raw_trades = pd.DataFrame()
+    try: df_tradebook = conn.read(worksheet="Tradebook", ttl=0)
+    except Exception: df_tradebook = pd.DataFrame()
+    return df_tradebook
 
-    if df_portfolio.empty:
-        df_portfolio = pd.DataFrame({
-            "Category": ["Next 50", "NIFTY 50", "GOLD", "Liquid"],
-            "Units_Accumulated": [0.0, 0.0, 0.0, 0.0],
-            "Current_LTP": [0.0, 0.0, 0.0, 0.0],
-            "Invested_Value": [0.0, 0.0, 0.0, 0.0]
-        })
-    return df_loan, df_portfolio, df_raw_trades
+df_tradebook = load_data()
+computed_xirr, df_eq_active, df_mf_active = process_tradebook_tab(df_tradebook)
 
-df_loan, df_portfolio, df_raw_trades = load_data()
+# Totals across EQ and MF
+eq_val = df_eq_active["Current_Value"].sum() if not df_eq_active.empty else 0.0
+eq_inv = df_eq_active["Invested_Value"].sum() if not df_eq_active.empty else 0.0
+mf_val = df_mf_active["Current_Value"].sum() if not df_mf_active.empty else 0.0
+mf_inv = df_mf_active["Invested_Value"].sum() if not df_mf_active.empty else 0.0
 
-for idx, row in df_portfolio.iterrows():
-    cat = row["Category"]
-    if cat in TICKERS:
-        fetched_ltp = fetch_live_ltp(TICKERS[cat])
-        if fetched_ltp is not None and fetched_ltp > 0:
-            df_portfolio.at[idx, "Current_LTP"] = fetched_ltp
-
-df_portfolio["Units_Accumulated"] = pd.to_numeric(df_portfolio["Units_Accumulated"], errors='coerce').fillna(0.0)
-df_portfolio["Current_LTP"] = pd.to_numeric(df_portfolio["Current_LTP"], errors='coerce').fillna(0.0)
-df_portfolio["Invested_Value"] = pd.to_numeric(df_portfolio["Invested_Value"], errors='coerce').fillna(0.0)
-
-computed_xirr, df_portfolio, df_mf_portfolio = process_raw_trades_tab(df_raw_trades, df_portfolio)
-
-df_portfolio["Current_Value"] = df_portfolio["Units_Accumulated"] * df_portfolio["Current_LTP"]
-df_portfolio["P&L (₹)"] = df_portfolio["Current_Value"] - df_portfolio["Invested_Value"]
-
-etf_val = df_portfolio["Current_Value"].sum()
-etf_inv = df_portfolio["Invested_Value"].sum()
-mf_val = df_mf_portfolio["Current_Value"].sum() if not df_mf_portfolio.empty else 0.0
-mf_inv = df_mf_portfolio["Invested_Value"].sum() if not df_mf_portfolio.empty else 0.0
-
-total_portfolio_val = etf_val + mf_val
-total_portfolio_invested = etf_inv + mf_inv
+total_portfolio_val = eq_val + mf_val
+total_portfolio_invested = eq_inv + mf_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
+# Summary Visualizer
 with st.container(border=True):
     st.subheader("🎯 Net-Debt-Zero Visualizer")
     net_debt = max(0.0, INITIAL_LOAN - total_portfolio_val)
@@ -325,13 +345,13 @@ st.divider()
 
 st.subheader("2. Live Portfolio Holdings")
 
-st.markdown("#### 📊 ETF Holdings")
-active_etfs = df_portfolio[df_portfolio["Invested_Value"] > 0]
-if active_etfs.empty:
-    st.info("No active ETF holdings found.")
+# Section 2A: Equity & ETF Holdings
+st.markdown("#### 📊 Equity & ETF Holdings")
+if df_eq_active.empty:
+    st.info("No active Equity/ETF holdings found in 'Tradebook' tab.")
 else:
-    for _, row in active_etfs.iterrows():
-        cat = row["Category"]
+    for _, row in df_eq_active.iterrows():
+        sym = row["Symbol"]
         units = row["Units_Accumulated"]
         ltp = row["Current_LTP"]
         inv = row["Invested_Value"]
@@ -340,16 +360,19 @@ else:
         pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
         
         with st.container(border=True):
-            st.markdown(f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)}</span>", unsafe_allow_html=True)
+            st.markdown(f"**{sym}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", unsafe_allow_html=True)
             m1, m2, m3 = st.columns(3)
             m1.metric("Invested", format_inr(inv))
             m2.metric("Current Value", format_inr(curr))
             m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
-if not df_mf_portfolio.empty:
-    st.markdown("#### 💼 Mutual Fund Holdings")
-    for _, row in df_mf_portfolio.iterrows():
-        cat = row["Category"]
+# Section 2B: Mutual Fund Holdings
+st.markdown("#### 💼 Mutual Fund Holdings")
+if df_mf_active.empty:
+    st.info("No active Mutual Fund holdings found in 'Tradebook' tab.")
+else:
+    for _, row in df_mf_active.iterrows():
+        sym = row["Symbol"]
         units = row["Units_Accumulated"]
         ltp = row["Current_LTP"]
         inv = row["Invested_Value"]
@@ -358,7 +381,7 @@ if not df_mf_portfolio.empty:
         pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
         
         with st.container(border=True):
-            st.markdown(f"**{cat}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} NAV</span>", unsafe_allow_html=True)
+            st.markdown(f"**{sym}** &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", unsafe_allow_html=True)
             m1, m2, m3 = st.columns(3)
             m1.metric("Invested", format_inr(inv))
             m2.metric("Current Value", format_inr(curr))
