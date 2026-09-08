@@ -6,7 +6,6 @@ import urllib.request
 import json
 import re
 import io
-import random
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
@@ -154,7 +153,6 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
     
     records = []
 
-    # CASE A: Zerodha Console Excel Statement (.xlsx / .xls)
     if fname.endswith(('.XLSX', '.XLS')):
         xls = pd.ExcelFile(uploaded_file)
         sheets = xls.sheet_names
@@ -210,7 +208,6 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
                         "P&L (₹)": round(qty * (ltp - avg_price), 2)
                     })
 
-    # CASE B: Zerodha Kite / Console Holdings CSV (.csv)
     elif fname.endswith('.CSV'):
         df = pd.read_csv(uploaded_file)
         df.columns = [str(c).strip().replace('.', '').lower() for c in df.columns]
@@ -511,528 +508,497 @@ proj_date, proj_yrs, proj_mos = project_ndz_target(
     current_principal, total_portfolio_val, current_interest_rate, full_emi, is_handover, xirr_rate=console_xirr
 )
 
-# --- HEADER & MANIFESTATION ENGINE TOGGLE ---
-title_col, manifest_col = st.columns([3, 2])
+st.title("🏡 Home Loan & 📈 Investment Tracker")
 
-with title_col:
-    st.title("🏡 Home Loan & 📈 Investment Tracker")
+# ==========================================
+# --- TOP-LEVEL NAVIGATION & HERO CARDS ---
+# ==========================================
 
-with manifest_col:
-    st.write("")
-    is_manifest_mode = st.toggle(
-        "✨ **Manifest Net-Debt-Zero (Dec 2035)**",
-        value=False,
-        help="Visualize reaching ₹1 Crore corpus & ₹0 debt by December 2035 at 13.6% XIRR."
-    )
+# Default landing page tab is "✨ Definite Chief Aim"
+tab_aim, tab_dashboard = st.tabs(["✨ Definite Chief Aim", "📊 Loan & Investment Dashboard"])
 
-# --- OVERRIDE LOGIC FOR MANIFESTATION / VISUALIZATION MODE ---
-if is_manifest_mode:
-    total_portfolio_val = 10000000.0  # ₹1 Crore Target Corpus
-    current_principal = 0.0
-    total_principal_cleared = INITIAL_LOAN
-    
-    current_rem_months = 0
-    rem_years = 0.0
-    is_ndz_achieved = True
-    proj_date = "Dec 2035"
-    proj_yrs = 0
-    proj_mos = 0
-    console_xirr = 13.6
+with tab_aim:
+    # --- HERO CARD: DEFINITE CHIEF AIM IN LIFE ---
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
+        <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">
+            🌟 My Definite Chief Aim in Life
+        </h2>
+        <p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">
+            "My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."
+        </p>
+        <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
+        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #FFD166; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
+                <h3 style="color: #FFD166; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                    🧘 For Happiness
+                </h3>
+                <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
+                    Practice gratitude and meditation.
+                </p>
+            </div>
+            <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #06D6A0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
+                <h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                    🥗 For Health
+                </h3>
+                <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
+                    Eat healthy and nourishing food. Appreciate my natural health and body.
+                </p>
+            </div>
+            <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
+                <h3 style="color: #4CC9F0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                    💎 For Wealth
+                </h3>
+                <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
+                    Provide valuable and efficient service joyfully. Donate to people in need. Celebrate financial abundance around me.
+                </p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.success(
-        "🙏 **Goal:** I am deeply grateful that by **December 2035**, my investment portfolio corpus has grown "
-        "more than home loan principal, generating effortless financial peace and security."
-    )
+    # Summary Section on Aim Screen
+    with st.container(border=True):
+        st.subheader("🎯 Net-Debt-Zero Visualizer")
+        net_debt = max(0.0, current_principal - total_portfolio_val)
+        nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
+        
+        xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
 
-# Summary Section (Net-Debt-Zero Visualizer Card)
-with st.container(border=True):
-    st.subheader("🎯 Net-Debt-Zero Visualizer")
-    net_debt = max(0.0, current_principal - total_portfolio_val)
-    nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
-    
-    xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
+        nd_col1, nd_col2 = st.columns([3, 1])
+        with nd_col1:
+            st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
+            st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active Console XIRR: {xirr_label}")
+        with nd_col2:
+            if is_ndz_achieved:
+                st.success("🎉 Zero Debt Achieved!")
+            else:
+                st.metric("Net Debt Pending", format_inr(net_debt))
 
-    nd_col1, nd_col2 = st.columns([3, 1])
-    with nd_col1:
-        st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
-        st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active Console XIRR: {xirr_label}")
-    with nd_col2:
-        if is_ndz_achieved:
-            st.success("🎉 Zero Debt Achieved!")
+        if not is_ndz_achieved:
+            st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
         else:
-            st.metric("Net Debt Pending", format_inr(net_debt))
+            st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You can now service EMIs directly from portfolio withdrawals!")
 
-    if not is_ndz_achieved:
-        st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
-    else:
-        st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You can now service EMIs directly from portfolio withdrawals!")
+        st.divider()
 
-    st.divider()
-
-    pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
-    
-    if is_manifest_mode:
-        s_col1, s_col2 = st.columns(2)
-        s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
-        s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
-    else:
         s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
         s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
         s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
         s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
         s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
 
-# --- AFFIRMATIONS & MANIFESTATION ISOLATION ---
-if is_manifest_mode:
-    st.divider()
-    
-    abraham_quotes = [
-        "Everything is always working out for me.",
-        "The entire universe is conspiring to give me everything that I want.",
-        "When I'm feeling good, I'm allowing in good.",
-        "Anything I can imagine being, doing, or having, I can be, do, or have.",
-        "I am the creator of my own reality."
-    ]
-    random_abraham_quote = random.choice(abraham_quotes)
+with tab_dashboard:
+    # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
+    st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-    with st.container(border=True):
-        st.markdown("### 📖 Sacred Scripture")
-        st.warning(
-            "✝️ **Matthew 7:7-8**\n\n"
-            "“Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you: "
-            "For every one that asketh receiveth; and he that seeketh findeth; and to him that knocketh it shall be opened.”"
-        )
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
+        st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
+        if not is_handover:
+            with st.popover("✏️ Edit Disbursement Stage"):
+                st.markdown("### 🏗️ Update Loan Disbursement")
+                selected_stage = st.radio(
+                    "Select Disbursed Milestone:",
+                    [
+                        "90% - Initial Disbursed Base",
+                        "95% - Plastering Completed (~Jan 2027)",
+                        "100% - Handover Completed (Full EMI Starts)"
+                    ],
+                    index=0 if disbursed_ratio == 0.90 else (1 if disbursed_ratio == 0.95 else 2)
+                )
+                
+                new_ratio = 0.90 if "90%" in selected_stage else (0.95 if "95%" in selected_stage else 1.0)
+                confirm_handover = False
+                if new_ratio == 1.0:
+                    st.warning(f"⚠️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** ({format_inr(full_emi)}) and this edit option will be **permanently locked**.")
+                    confirm_handover = st.checkbox("I confirm handover is completed and agree to lock settings.")
+                
+                can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
+                
+                if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary"):
+                    updated_settings = pd.DataFrame([{
+                        "Disbursed_Ratio": new_ratio,
+                        "Handover_Completed": (new_ratio == 1.0),
+                        "Interest_Rate": current_interest_rate,
+                        "Console_XIRR": console_xirr if console_xirr is not None else 0.0
+                    }])
+                    conn.update(worksheet="Loan_Settings", data=updated_settings)
+                    st.success("Loan settings updated successfully!")
+                    st.rerun()
 
-        st.divider()
-
-        st.markdown("### ✨ Abraham Hicks Vibrational Affirmation")
-        st.info(f"💫 **“{random_abraham_quote}”**")
-        
-        st.divider()
-        
-        st.markdown("### 📜 Napoleon Hill's Self-Confidence Formula")
-        st.markdown(
-            "1. **Definite Purpose:** I know that I have the ability to achieve the object of my definite purpose in life; therefore, I demand of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.\n\n"
-            "2. **Dominating Thoughts:** I realize the dominating thoughts of my mind will eventually reproduce themselves in outward, physical action, and gradually transform themselves into physical reality; therefore, I will concentrate my thought, for thirty minutes daily, upon the task of thinking of the person I intend to become, thereby creating in my mind a clear mental picture.\n\n"
-            "3. **Autosuggestion:** I know through the principle of autosuggestion, any desire that I persistently hold in my mind will eventually seek expression through some practical means of attaining the object back of it; therefore, I will devote ten minutes daily to demanding of myself the development of self-confidence.\n\n"
-            "4. **Chief Aim:** I have clearly written down a description of my definite chief aim in life, and I will never stop trying, until I shall have developed sufficient self-confidence for its attainment.\n\n"
-            "5. **Truth, Justice & Faith:** I fully realize that no wealth or position can long endure, unless built upon truth and justice; therefore, I will engage in no transaction that does not benefit all whom it affects. I will succeed by attracting to myself the forces I wish to use, and the cooperation of other people. I will induce others to serve me, because of my willingness to serve others. I will eliminate hatred, envy, jealousy, selfishness, and cynicism, by developing love for all humanity, because I know that a negative attitude toward others can never bring me success. I will cause others to believe in me, because I will believe in them, and in myself. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full faith that it will gradually influence my thoughts and actions so that I will become a self-reliant, and successful, person."
-        )
-
-    # Stop execution here so only the Visualizer card and Affirmations render
-    st.stop()
-
-st.divider()
-
-# --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
-st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
-
-m_col1, m_col2, m_col3 = st.columns(3)
-with m_col1:
-    st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
-    if not is_handover:
-        with st.popover("✏️ Edit Disbursement Stage"):
-            st.markdown("### 🏗️ Update Loan Disbursement")
-            selected_stage = st.radio(
-                "Select Disbursed Milestone:",
-                [
-                    "90% - Initial Disbursed Base",
-                    "95% - Plastering Completed (~Jan 2027)",
-                    "100% - Handover Completed (Full EMI Starts)"
-                ],
-                index=0 if disbursed_ratio == 0.90 else (1 if disbursed_ratio == 0.95 else 2)
+    with m_col2:
+        st.metric("Interest Rate", f"{current_interest_rate}%", "Floating Rate")
+        with st.popover("✏️ Update Interest Rate"):
+            st.markdown("### 🏦 Update Interest Rate")
+            new_rate = st.number_input(
+                "New Annual Interest Rate (%)", 
+                value=float(current_interest_rate), 
+                step=0.05, 
+                format="%.2f"
             )
-            
-            new_ratio = 0.90 if "90%" in selected_stage else (0.95 if "95%" in selected_stage else 1.0)
-            confirm_handover = False
-            if new_ratio == 1.0:
-                st.warning(f"⚠️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** ({format_inr(full_emi)}) and this edit option will be **permanently locked**.")
-                confirm_handover = st.checkbox("I confirm handover is completed and agree to lock settings.")
-            
-            can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
-            
-            if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary"):
+            if st.button("💾 Save New Rate", type="primary"):
                 updated_settings = pd.DataFrame([{
-                    "Disbursed_Ratio": new_ratio,
-                    "Handover_Completed": (new_ratio == 1.0),
-                    "Interest_Rate": current_interest_rate,
+                    "Disbursed_Ratio": disbursed_ratio,
+                    "Handover_Completed": is_handover_completed,
+                    "Interest_Rate": new_rate,
                     "Console_XIRR": console_xirr if console_xirr is not None else 0.0
                 }])
                 conn.update(worksheet="Loan_Settings", data=updated_settings)
-                st.success("Loan settings updated successfully!")
+                st.success(f"Interest rate dynamically updated to {new_rate}%!")
                 st.rerun()
 
-with m_col2:
-    st.metric("Interest Rate", f"{current_interest_rate}%", "Floating Rate")
-    with st.popover("✏️ Update Interest Rate"):
-        st.markdown("### 🏦 Update Interest Rate")
-        new_rate = st.number_input(
-            "New Annual Interest Rate (%)", 
-            value=float(current_interest_rate), 
-            step=0.05, 
-            format="%.2f"
-        )
-        if st.button("💾 Save New Rate", type="primary"):
-            updated_settings = pd.DataFrame([{
-                "Disbursed_Ratio": disbursed_ratio,
-                "Handover_Completed": is_handover_completed,
-                "Interest_Rate": new_rate,
-                "Console_XIRR": console_xirr if console_xirr is not None else 0.0
+    with m_col3:
+        st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
+
+    current_month_str = datetime.now().strftime("%b %Y")
+
+    if not df_loan.empty and "month_year" in [c.lower() for c in df_loan.columns]:
+        emi_records = df_loan[df_loan["payment_type"].astype(str).str.contains("Pre-EMI|Full EMI", case=False, na=False)]
+        is_current_month_paid = current_month_str in emi_records["month_year"].values
+    else:
+        is_current_month_paid = False
+
+    with st.form("emi_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        c1.text_input("Month-Year", value=current_month_str, disabled=True)
+        
+        payment_type = "Full EMI" if is_handover else "Pre-EMI"
+        expected_loan = full_emi if is_handover else monthly_pre_emi
+        c2.text_input("Actual Payment Made", value=format_inr(expected_loan), disabled=True)
+        
+        with c3:
+            st.markdown("**Payment Status**")
+            if is_current_month_paid:
+                st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 PAID</span>", unsafe_allow_html=True)
+            else:
+                st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
+
+        if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
+            new_row = pd.DataFrame([{
+                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                "Month_Year": current_month_str, 
+                "Expected_Payment": expected_loan, 
+                "Actual_Payment": expected_loan, 
+                "Payment_Type": payment_type, 
+                "Confirmed": True,
+                "Interest_Rate": current_interest_rate
             }])
-            conn.update(worksheet="Loan_Settings", data=updated_settings)
-            st.success(f"Interest rate dynamically updated to {new_rate}%!")
+            conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
+            st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
             st.rerun()
 
-with m_col3:
-    st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
+    if is_current_month_paid:
+        st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
 
-current_month_str = datetime.now().strftime("%b %Y")
-
-if not df_loan.empty and "month_year" in [c.lower() for c in df_loan.columns]:
-    emi_records = df_loan[df_loan["payment_type"].astype(str).str.contains("Pre-EMI|Full EMI", case=False, na=False)]
-    is_current_month_paid = current_month_str in emi_records["month_year"].values
-else:
-    is_current_month_paid = False
-
-with st.form("emi_form", clear_on_submit=True):
-    c1, c2, c3 = st.columns(3)
-    c1.text_input("Month-Year", value=current_month_str, disabled=True)
-    
-    payment_type = "Full EMI" if is_handover else "Pre-EMI"
-    expected_loan = full_emi if is_handover else monthly_pre_emi
-    c2.text_input("Actual Payment Made", value=format_inr(expected_loan), disabled=True)
-    
-    with c3:
-        st.markdown("**Payment Status**")
-        if is_current_month_paid:
-            st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 PAID</span>", unsafe_allow_html=True)
-        else:
-            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
-
-    if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
-        new_row = pd.DataFrame([{
-            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-            "Month_Year": current_month_str, 
-            "Expected_Payment": expected_loan, 
-            "Actual_Payment": expected_loan, 
-            "Payment_Type": payment_type, 
-            "Confirmed": True,
-            "Interest_Rate": current_interest_rate
-        }])
-        conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-        st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
-        st.rerun()
-
-if is_current_month_paid:
-    st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
-
-# Principal Cleared Visualizer Card
-with st.container(border=True):
-    pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
-    st.markdown(f"**📉 Principal Cleared Tracker** ({pct_loan_cleared * 100:.2f}% of Initial Loan Paid)")
-    st.progress(min(pct_loan_cleared, 1.0))
-    
-    p_col1, p_col2, p_col3 = st.columns(3)
-    p_col1.metric("Total Principal Cleared", format_inr(total_principal_cleared), f"{pct_loan_cleared*100:.1f}% Cleared")
-    p_col2.metric("Cleared via Regular EMIs", format_inr(emi_principal_cleared))
-    p_col3.metric("Cleared via Part Payments", format_inr(prepay_principal_cleared))
-
-st.divider()
-
-# --- SECTION 2: LIVE PORTFOLIO HOLDINGS & ACTION HEADER ---
-sec2_hdr_col, sec2_act_col = st.columns([3, 1])
-
-with sec2_hdr_col:
-    st.subheader("2. Live Portfolio Holdings")
-
-with sec2_act_col:
-    with st.popover("📥 Import Holdings File(s)"):
-        st.markdown("**Import Zerodha Holdings (CSV or Excel)**")
+    # Principal Cleared Visualizer Card
+    with st.container(border=True):
+        pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
+        st.markdown(f"**📉 Principal Cleared Tracker** ({pct_loan_cleared * 100:.2f}% of Initial Loan Paid)")
+        st.progress(min(pct_loan_cleared, 1.0))
         
-        uploaded_files = st.file_uploader(
-            "Select Holdings File(s)", 
-            type=["csv", "xlsx", "xls"], 
-            accept_multiple_files=True,
-            key="holdings_uploader",
-            help="Upload multiple files at once (e.g. holdings-HEK312.csv, holdings-SDB789.xlsx)."
-        )
+        p_col1, p_col2, p_col3 = st.columns(3)
+        p_col1.metric("Total Principal Cleared", format_inr(total_principal_cleared), f"{pct_loan_cleared*100:.1f}% Cleared")
+        p_col2.metric("Cleared via Regular EMIs", format_inr(emi_principal_cleared))
+        p_col3.metric("Cleared via Part Payments", format_inr(prepay_principal_cleared))
 
-        account_mapping = {}
-        if uploaded_files:
-            st.markdown("---")
-            st.markdown("**👤 Confirm Account ID per File:**")
-            for file in uploaded_files:
-                match = re.search(r'\b([A-Z0-9]{6})\b', file.name.upper())
-                detected_acc = match.group(1) if match else ""
-                
-                if not detected_acc and file.name.upper().endswith(('.XLSX', '.XLS')):
-                    try:
-                        xls = pd.ExcelFile(file)
-                        sheet_to_use = 'Combined' if 'Combined' in xls.sheet_names else xls.sheet_names[0]
-                        df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None, nrows=15)
-                        for r in range(len(df_raw)):
-                            row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
-                            if 'Client ID' in row_vals:
-                                idx = row_vals.index('Client ID')
-                                if idx + 1 < len(row_vals):
-                                    detected_acc = row_vals[idx + 1].upper()
-                                    break
-                    except Exception:
-                        pass
-                        
-                user_acc = st.text_input(
-                    f"Account ID for `{file.name}`:",
-                    value=detected_acc,
-                    placeholder="e.g. HEK312 or SDB789 (Mandatory)",
-                    key=f"acc_input_{file.name}"
-                )
-                account_mapping[file.name] = user_acc.strip().upper()
+    st.divider()
 
-        st.markdown("---")
-        input_xirr = st.number_input(
-            "Console Overall XIRR (%)", 
-            value=None,
-            min_value=-100.0, 
-            max_value=500.0, 
-            step=0.1,
-            placeholder="e.g. 14.5 or -2.5 (Mandatory)",
-            help="Enter overall portfolio XIRR % from Zerodha Console. Negative, zero, and positive values are allowed."
-        )
+    # --- SECTION 2: LIVE PORTFOLIO HOLDINGS & ACTION HEADER ---
+    sec2_hdr_col, sec2_act_col = st.columns([3, 1])
 
-        if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings"):
-            missing_accounts = [fname for fname, acc in account_mapping.items() if not acc]
-            if input_xirr is None:
-                st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
-            elif not uploaded_files:
-                st.error("⚠️ Please select at least one holdings CSV or Excel file to upload.")
-            elif missing_accounts:
-                st.error(f"⚠️ Please specify an Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
-            else:
-                parsed_records = []
+    with sec2_hdr_col:
+        st.subheader("2. Live Portfolio Holdings")
+
+    with sec2_act_col:
+        with st.popover("📥 Import Holdings File(s)"):
+            st.markdown("**Import Zerodha Holdings (CSV or Excel)**")
+            
+            uploaded_files = st.file_uploader(
+                "Select Holdings File(s)", 
+                type=["csv", "xlsx", "xls"], 
+                accept_multiple_files=True,
+                key="holdings_uploader",
+                help="Upload multiple files at once (e.g. holdings-HEK312.csv, holdings-SDB789.xlsx)."
+            )
+
+            account_mapping = {}
+            if uploaded_files:
+                st.markdown("---")
+                st.markdown("**👤 Confirm Account ID per File:**")
                 for file in uploaded_files:
-                    target_acc = account_mapping.get(file.name, "")
-                    cid, df_parsed = parse_zerodha_holdings_file(file, file.name, override_account_id=target_acc)
-                    if not df_parsed.empty:
-                        parsed_records.append(df_parsed)
-                        st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}** from `{file.name}`")
-
-                if parsed_records:
-                    df_new_combined = pd.concat(parsed_records, ignore_index=True)
-                    df_new_combined.columns = [str(c).strip().lower() for c in df_new_combined.columns]
+                    match = re.search(r'\b([A-Z0-9]{6})\b', file.name.upper())
+                    detected_acc = match.group(1) if match else ""
                     
-                    uploaded_accounts = set(df_new_combined['account'].astype(str).str.upper().unique())
-
-                    df_existing = df_portfolio_raw.copy()
-                    if not df_existing.empty:
-                        df_existing.columns = [str(c).strip().lower() for c in df_existing.columns]
-                        df_retained = df_existing[~df_existing['account'].astype(str).str.upper().isin(uploaded_accounts)].copy()
-                    else:
-                        df_retained = pd.DataFrame()
-
-                    df_all_merged = pd.concat([df_retained, df_new_combined], ignore_index=True)
-
-                    keys = []
-                    for _, row in df_all_merged.iterrows():
-                        acc = safe_str(row.get('account', '')).upper()
-                        isin = safe_str(row.get('isin', '')).upper()
-                        sym = safe_str(row.get('symbol', '')).upper()
-                        asset_id = isin if (isin and isin != "NAN") else sym
-                        keys.append(f"{acc}_{asset_id}")
-
-                    df_all_merged["acc_asset_key"] = keys
-
-                    df_deduped_holdings = df_all_merged.drop_duplicates(subset=["acc_asset_key"], keep="last").drop(columns=["acc_asset_key"]).reset_index(drop=True)
-                    df_deduped_holdings = df_deduped_holdings.fillna("")
-
-                    try:
-                        conn.update(worksheet="Portfolio_Tracker", data=df_deduped_holdings)
-                        
-                        # Save XIRR to Loan_Settings
+                    if not detected_acc and file.name.upper().endswith(('.XLSX', '.XLS')):
                         try:
-                            df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
-                            if df_settings.empty:
-                                df_settings = pd.DataFrame([{"Disbursed_Ratio": 0.90, "Handover_Completed": "FALSE", "Interest_Rate": 7.20, "Console_XIRR": input_xirr}])
-                            else:
-                                df_settings.at[0, "Console_XIRR"] = input_xirr
-                            conn.update(worksheet="Loan_Settings", data=df_settings)
+                            xls = pd.ExcelFile(file)
+                            sheet_to_use = 'Combined' if 'Combined' in xls.sheet_names else xls.sheet_names[0]
+                            df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None, nrows=15)
+                            for r in range(len(df_raw)):
+                                row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
+                                if 'Client ID' in row_vals:
+                                    idx = row_vals.index('Client ID')
+                                    if idx + 1 < len(row_vals):
+                                        detected_acc = row_vals[idx + 1].upper()
+                                        break
                         except Exception:
                             pass
+                            
+                    user_acc = st.text_input(
+                        f"Account ID for `{file.name}`:",
+                        value=detected_acc,
+                        placeholder="e.g. HEK312 or SDB789 (Mandatory)",
+                        key=f"acc_input_{file.name}"
+                    )
+                    account_mapping[file.name] = user_acc.strip().upper()
 
-                        st.success("🎉 Successfully synced active holdings and Console XIRR!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Failed to update Google Sheets: {e}")
-
-# Section 2A: Equity & ETF Holdings
-st.markdown("#### 📊 Equity & ETF Holdings")
-if df_eq_active.empty:
-    st.info("No active Equity/ETF holdings found in 'Portfolio_Tracker' tab.")
-else:
-    for _, row in df_eq_active.iterrows():
-        sym = row["Symbol"]
-        acc = row["Account"]
-        units = row["Units_Accumulated"]
-        ltp = row["Current_LTP"]
-        inv = row["Invested_Value"]
-        curr = row["Current_Value"]
-        pnl = row["P&L (₹)"]
-        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-        
-        with st.container(border=True):
-            st.markdown(
-                f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", 
-                unsafe_allow_html=True
+            st.markdown("---")
+            input_xirr = st.number_input(
+                "Console Overall XIRR (%)", 
+                value=None,
+                min_value=-100.0, 
+                max_value=500.0, 
+                step=0.1,
+                placeholder="e.g. 14.5 or -2.5 (Mandatory)",
+                help="Enter overall portfolio XIRR % from Zerodha Console. Negative, zero, and positive values are allowed."
             )
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Invested", format_inr(inv))
-            m2.metric("Current Value", format_inr(curr))
-            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
-# Section 2B: Mutual Fund Holdings
-st.markdown("#### 💼 Mutual Fund Holdings")
-if df_mf_active.empty:
-    st.info("No active Mutual Fund holdings found in 'Portfolio_Tracker' tab.")
-else:
-    for _, row in df_mf_active.iterrows():
-        sym = row["Symbol"]
-        acc = row["Account"]
-        units = row["Units_Accumulated"]
-        ltp = row["Current_LTP"]
-        inv = row["Invested_Value"]
-        curr = row["Current_Value"]
-        pnl = row["P&L (₹)"]
-        pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-        
-        with st.container(border=True):
-            st.markdown(
-                f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", 
-                unsafe_allow_html=True
-            )
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Invested", format_inr(inv))
-            m2.metric("Current Value", format_inr(curr))
-            m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+            if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings"):
+                missing_accounts = [fname for fname, acc in account_mapping.items() if not acc]
+                if input_xirr is None:
+                    st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
+                elif not uploaded_files:
+                    st.error("⚠️ Please select at least one holdings CSV or Excel file to upload.")
+                elif missing_accounts:
+                    st.error(f"⚠️ Please specify an Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
+                else:
+                    parsed_records = []
+                    for file in uploaded_files:
+                        target_acc = account_mapping.get(file.name, "")
+                        cid, df_parsed = parse_zerodha_holdings_file(file, file.name, override_account_id=target_acc)
+                        if not df_parsed.empty:
+                            parsed_records.append(df_parsed)
+                            st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}** from `{file.name}`")
 
-st.divider()
+                    if parsed_records:
+                        df_new_combined = pd.concat(parsed_records, ignore_index=True)
+                        df_new_combined.columns = [str(c).strip().lower() for c in df_new_combined.columns]
+                        
+                        uploaded_accounts = set(df_new_combined['account'].astype(str).str.upper().unique())
 
-# --- SECTION 3: REVISED REPAYMENT & NDZ STRATEGY ENGINE ---
-st.subheader("3. Part Payment & Prepayment Engine")
+                        df_existing = df_portfolio_raw.copy()
+                        if not df_existing.empty:
+                            df_existing.columns = [str(c).strip().lower() for c in df_existing.columns]
+                            df_retained = df_existing[~df_existing['account'].astype(str).str.upper().isin(uploaded_accounts)].copy()
+                        else:
+                            df_retained = pd.DataFrame()
 
-curr_year_num, curr_target_prepay, curr_paid_prepay, curr_pending_prepay, has_4pct_executed = get_current_year_prepayment_status(df_loan, full_emi)
-corpus_4_pct = 0.04 * total_portfolio_val
-min_prepayment_allowed = 2 * full_emi
+                        df_all_merged = pd.concat([df_retained, df_new_combined], ignore_index=True)
 
-# NET-DEBT-ZERO PREPAYMENT LOCK CHECK
-if not is_ndz_achieved:
-    with st.container(border=True):
-        st.markdown("### 🔒 Prepayment Engine Locked (Net-Debt-Zero Pending)")
-        st.warning(
-            f"⚠️ **Rule Restriction Active:** Prepayments are locked while your portfolio corpus (**{format_inr(total_portfolio_val)}**) is less than your remaining principal pending (**{format_inr(current_principal)}**).\n\n"
-            f"**Net Debt Gap:** **{format_inr(current_principal - total_portfolio_val)}** remaining to reach Net-Debt-Zero."
-        )
-        
-        c_l1, c_l2 = st.columns(2)
-        with c_l1:
-            st.info("🎯 **Primary Objective:** Direct all surplus monthly savings into building your investment portfolio corpus until Net-Debt-Zero is achieved.")
-        with c_l2:
-            st.success("🔓 **Unlocks Upon Net-Debt-Zero:**\n1. **Corpus EMI Servicing**: Withdraw monthly EMIs directly from corpus without touching salary.\n2. **4% Annual Prepayment**: Execute 4% corpus prepayments when Console XIRR > 10.0%.")
+                        keys = []
+                        for _, row in df_all_merged.iterrows():
+                            acc = safe_str(row.get('account', '')).upper()
+                            isin = safe_str(row.get('isin', '')).upper()
+                            sym = safe_str(row.get('symbol', '')).upper()
+                            asset_id = isin if (isin and isin != "NAN") else sym
+                            keys.append(f"{acc}_{asset_id}")
 
-else:
-    # UNLOCKED STATE (Corpus >= Principal Pending)
-    st.success("🎉 **Net-Debt-Zero Reached:** Portfolio corpus meets or exceeds remaining loan principal. Prepayment strategies are now fully unlocked!")
-    
-    with st.container(border=True):
-        st.markdown("### 🚦 Live 4% Portfolio Corpus Rule Status")
-        st.caption("ℹ️ **Annual Limit:** Tapping the portfolio corpus under this rule is strictly limited to **1 time per loan year**.")
-        
-        rule_col1, rule_col2, rule_col3 = st.columns(3)
-        rule_col1.metric("4% Corpus Allocation", format_inr(corpus_4_pct))
-        rule_col2.metric("2x EMI Minimum Threshold", format_inr(min_prepayment_allowed))
-        
-        is_corpus_sufficient = corpus_4_pct >= min_prepayment_allowed
-        is_xirr_valid = (console_xirr is not None) and (console_xirr > 10.0)
-        
-        with rule_col3:
-            st.markdown("**Corpus Requirement**")
-            if has_4pct_executed:
-                st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR (1/1 Used)</span>", unsafe_allow_html=True)
-            elif is_corpus_sufficient and is_xirr_valid:
-                st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 UNLOCKED (XIRR > 10%)</span>", unsafe_allow_html=True)
-            elif not is_xirr_valid:
-                st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED (XIRR ≤ 10%)</span>", unsafe_allow_html=True)
-            else:
-                st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED (< 2x EMI)</span>", unsafe_allow_html=True)
+                        df_all_merged["acc_asset_key"] = keys
 
-    st.markdown("### 💸 Execute Strategy Action")
+                        df_deduped_holdings = df_all_merged.drop_duplicates(subset=["acc_asset_key"], keep="last").drop(columns=["acc_asset_key"]).reset_index(drop=True)
+                        df_deduped_holdings = df_deduped_holdings.fillna("")
 
-    prepay_strategy_type = st.radio(
-        "Select Action Strategy:",
-        options=[
-            "Service Monthly EMI from Portfolio Corpus (Zero Salary Impact)",
-            "Execute 4% Portfolio Corpus Prepayment (Requires XIRR > 10%)"
-        ],
-        horizontal=True
-    )
+                        try:
+                            conn.update(worksheet="Portfolio_Tracker", data=df_deduped_holdings)
+                            
+                            # Save XIRR to Loan_Settings
+                            try:
+                                df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
+                                if df_settings.empty:
+                                    df_settings = pd.DataFrame([{"Disbursed_Ratio": 0.90, "Handover_Completed": "FALSE", "Interest_Rate": 7.20, "Console_XIRR": input_xirr}])
+                                else:
+                                    df_settings.at[0, "Console_XIRR"] = input_xirr
+                                conn.update(worksheet="Loan_Settings", data=df_settings)
+                            except Exception:
+                                pass
 
-    pp_input_col1, pp_input_col2 = st.columns(2)
+                            st.success("🎉 Successfully synced active holdings and Console XIRR!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to update Google Sheets: {e}")
 
-    if "4% Portfolio Corpus" in prepay_strategy_type:
-        enable_pp = is_xirr_valid and is_corpus_sufficient and (not has_4pct_executed)
-        
-        with pp_input_col1:
-            st.info(f"Active Console XIRR: **{console_xirr:.2f}%**" if console_xirr is not None else "Active Console XIRR: Not set")
-            if not is_xirr_valid:
-                st.warning("🔒 XIRR must be > 10.0% to unlock 4% corpus prepayment.")
-            elif has_4pct_executed:
-                st.warning("🔒 4% Corpus Prepayment has already been executed for this loan year.")
-
-        with pp_input_col2:
-            pp_amount = st.number_input(
-                "Prepayment Amount (₹)", 
-                value=float(corpus_4_pct), 
-                step=5000.0, 
-                disabled=not enable_pp
-            )
-        logged_payment_type = "Prepayment (4% Corpus)"
-        
-        # Action Preview Calculation
-        principal_reduction = pp_amount if enable_pp else 0.0
-        new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
-        months_saved = max(0, round(current_rem_months - new_rem_months))
-        st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
-
-    else: # Service Monthly EMI from Corpus
-        enable_pp = True
-        with pp_input_col1:
-            st.info(f"Monthly EMI of **{format_inr(full_emi)}** will be withdrawn from portfolio corpus.")
+    # Section 2A: Equity & ETF Holdings
+    st.markdown("#### 📊 Equity & ETF Holdings")
+    if df_eq_active.empty:
+        st.info("No active Equity/ETF holdings found in 'Portfolio_Tracker' tab.")
+    else:
+        for _, row in df_eq_active.iterrows():
+            sym = row["Symbol"]
+            acc = row["Account"]
+            units = row["Units_Accumulated"]
+            ltp = row["Current_LTP"]
+            inv = row["Invested_Value"]
+            curr = row["Current_Value"]
+            pnl = row["P&L (₹)"]
+            pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
             
-        with pp_input_col2:
-            pp_amount = st.number_input(
-                "EMI Amount (₹)", 
-                value=float(full_emi), 
-                disabled=True
-            )
-        logged_payment_type = "Full EMI (Corpus Withdrawal)"
-        
-        # Action Preview Calculation for Regular EMI
-        interest_portion = current_principal * r_monthly
-        principal_reduction = max(0.0, full_emi - interest_portion)
-        new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
-        months_saved = max(0, round(current_rem_months - new_rem_months))
-        st.metric("Tenure Progressed By", f"{months_saved} Month", "Standard 1-Month Amortization Cycle")
+            with st.container(border=True):
+                st.markdown(
+                    f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", 
+                    unsafe_allow_html=True
+                )
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Invested", format_inr(inv))
+                m2.metric("Current Value", format_inr(curr))
+                m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
-    if st.button("Execute Strategy Action & Log to Sheet", disabled=not enable_pp, type="primary"):
-        new_row = pd.DataFrame([{
-            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-            "Month_Year": datetime.now().strftime("%b %Y"), 
-            "Expected_Payment": expected_loan, 
-            "Actual_Payment": pp_amount, 
-            "Payment_Type": logged_payment_type, 
-            "Confirmed": True,
-            "Interest_Rate": current_interest_rate
-        }])
-        conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-        st.success(f"Executed {logged_payment_type} of {format_inr(pp_amount)} successfully!")
-        st.cache_data.clear()
-        st.rerun()
+    # Section 2B: Mutual Fund Holdings
+    st.markdown("#### 💼 Mutual Fund Holdings")
+    if df_mf_active.empty:
+        st.info("No active Mutual Fund holdings found in 'Portfolio_Tracker' tab.")
+    else:
+        for _, row in df_mf_active.iterrows():
+            sym = row["Symbol"]
+            acc = row["Account"]
+            units = row["Units_Accumulated"]
+            ltp = row["Current_LTP"]
+            inv = row["Invested_Value"]
+            curr = row["Current_Value"]
+            pnl = row["P&L (₹)"]
+            pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
+            
+            with st.container(border=True):
+                st.markdown(
+                    f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", 
+                    unsafe_allow_html=True
+                )
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Invested", format_inr(inv))
+                m2.metric("Current Value", format_inr(curr))
+                m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+
+    st.divider()
+
+    # --- SECTION 3: REVISED REPAYMENT & NDZ STRATEGY ENGINE ---
+    st.subheader("3. Part Payment & Prepayment Engine")
+
+    curr_year_num, curr_target_prepay, curr_paid_prepay, curr_pending_prepay, has_4pct_executed = get_current_year_prepayment_status(df_loan, full_emi)
+    corpus_4_pct = 0.04 * total_portfolio_val
+    min_prepayment_allowed = 2 * full_emi
+
+    # NET-DEBT-ZERO PREPAYMENT LOCK CHECK
+    if not is_ndz_achieved:
+        with st.container(border=True):
+            st.markdown("### 🔒 Prepayment Engine Locked (Net-Debt-Zero Pending)")
+            st.warning(
+                f"⚠️ **Rule Restriction Active:** Prepayments are locked while your portfolio corpus (**{format_inr(total_portfolio_val)}**) is less than your remaining principal pending (**{format_inr(current_principal)}**).\n\n"
+                f"**Net Debt Gap:** **{format_inr(current_principal - total_portfolio_val)}** remaining to reach Net-Debt-Zero."
+            )
+            
+            c_l1, c_l2 = st.columns(2)
+            with c_l1:
+                st.info("🎯 **Primary Objective:** Direct all surplus monthly savings into building your investment portfolio corpus until Net-Debt-Zero is achieved.")
+            with c_l2:
+                st.success("🔓 **Unlocks Upon Net-Debt-Zero:**\n1. **Corpus EMI Servicing**: Withdraw monthly EMIs directly from corpus without touching salary.\n2. **4% Annual Prepayment**: Execute 4% corpus prepayments when Console XIRR > 10.0%.")
+
+    else:
+        # UNLOCKED STATE (Corpus >= Principal Pending)
+        st.success("🎉 **Net-Debt-Zero Reached:** Portfolio corpus meets or exceeds remaining loan principal. Prepayment strategies are now fully unlocked!")
+        
+        with st.container(border=True):
+            st.markdown("### 🚦 Live 4% Portfolio Corpus Rule Status")
+            st.caption("ℹ️ **Annual Limit:** Tapping the portfolio corpus under this rule is strictly limited to **1 time per loan year**.")
+            
+            rule_col1, rule_col2, rule_col3 = st.columns(3)
+            rule_col1.metric("4% Corpus Allocation", format_inr(corpus_4_pct))
+            rule_col2.metric("2x EMI Minimum Threshold", format_inr(min_prepayment_allowed))
+            
+            is_corpus_sufficient = corpus_4_pct >= min_prepayment_allowed
+            is_xirr_valid = (console_xirr is not None) and (console_xirr > 10.0)
+            
+            with rule_col3:
+                st.markdown("**Corpus Requirement**")
+                if has_4pct_executed:
+                    st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR (1/1 Used)</span>", unsafe_allow_html=True)
+                elif is_corpus_sufficient and is_xirr_valid:
+                    st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 UNLOCKED (XIRR > 10%)</span>", unsafe_allow_html=True)
+                elif not is_xirr_valid:
+                    st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED (XIRR ≤ 10%)</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED (< 2x EMI)</span>", unsafe_allow_html=True)
+
+        st.markdown("### 💸 Execute Strategy Action")
+
+        prepay_strategy_type = st.radio(
+            "Select Action Strategy:",
+            options=[
+                "Service Monthly EMI from Portfolio Corpus (Zero Salary Impact)",
+                "Execute 4% Portfolio Corpus Prepayment (Requires XIRR > 10%)"
+            ],
+            horizontal=True
+        )
+
+        pp_input_col1, pp_input_col2 = st.columns(2)
+
+        if "4% Portfolio Corpus" in prepay_strategy_type:
+            enable_pp = is_xirr_valid and is_corpus_sufficient and (not has_4pct_executed)
+            
+            with pp_input_col1:
+                st.info(f"Active Console XIRR: **{console_xirr:.2f}%**" if console_xirr is not None else "Active Console XIRR: Not set")
+                if not is_xirr_valid:
+                    st.warning("🔒 XIRR must be > 10.0% to unlock 4% corpus prepayment.")
+                elif has_4pct_executed:
+                    st.warning("🔒 4% Corpus Prepayment has already been executed for this loan year.")
+
+            with pp_input_col2:
+                pp_amount = st.number_input(
+                    "Prepayment Amount (₹)", 
+                    value=float(corpus_4_pct), 
+                    step=5000.0, 
+                    disabled=not enable_pp
+                )
+            logged_payment_type = "Prepayment (4% Corpus)"
+            
+            # Action Preview Calculation
+            principal_reduction = pp_amount if enable_pp else 0.0
+            new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
+            months_saved = max(0, round(current_rem_months - new_rem_months))
+            st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
+
+        else: # Service Monthly EMI from Corpus
+            enable_pp = True
+            with pp_input_col1:
+                st.info(f"Monthly EMI of **{format_inr(full_emi)}** will be withdrawn from portfolio corpus.")
+                
+            with pp_input_col2:
+                pp_amount = st.number_input(
+                    "EMI Amount (₹)", 
+                    value=float(full_emi), 
+                    disabled=True
+                )
+            logged_payment_type = "Full EMI (Corpus Withdrawal)"
+            
+            # Action Preview Calculation for Regular EMI
+            interest_portion = current_principal * r_monthly
+            principal_reduction = max(0.0, full_emi - interest_portion)
+            new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
+            months_saved = max(0, round(current_rem_months - new_rem_months))
+            st.metric("Tenure Progressed By", f"{months_saved} Month", "Standard 1-Month Amortization Cycle")
+
+        if st.button("Execute Strategy Action & Log to Sheet", disabled=not enable_pp, type="primary"):
+            new_row = pd.DataFrame([{
+                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                "Month_Year": datetime.now().strftime("%b %Y"), 
+                "Expected_Payment": expected_loan, 
+                "Actual_Payment": pp_amount, 
+                "Payment_Type": logged_payment_type, 
+                "Confirmed": True,
+                "Interest_Rate": current_interest_rate
+            }])
+            conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
+            st.success(f"Executed {logged_payment_type} of {format_inr(pp_amount)} successfully!")
+            st.cache_data.clear()
+            st.rerun()
