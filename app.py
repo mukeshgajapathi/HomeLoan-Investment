@@ -602,16 +602,9 @@ with tab_aim:
         
         st.divider()
         
-        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        s_col1, s_col2 = st.columns(2)
         s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
-        
-        aligned_portfolio = max(current_principal, total_portfolio_val)
-        s_col2.metric("Portfolio Value", format_inr(aligned_portfolio))
-        s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
-        
-        goal_pnl = aligned_portfolio - total_portfolio_invested
-        goal_pnl_pct = (goal_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
-        s_col4.metric("Overall Net P&L", format_inr(goal_pnl), f"{goal_pnl_pct:+.2f}%")
+        s_col2.metric("Portfolio Value", "₹1,00,00,000", "1 Cr - Total Financial Abundance")
 
 with tab_dashboard:
     # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB (CURRENT REALITY) ---
