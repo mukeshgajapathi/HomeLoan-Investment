@@ -511,7 +511,7 @@ proj_date, proj_yrs, proj_mos = project_ndz_target(
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
 # ==========================================
-# --- TOP-LEVEL NAVIGATION & HERO CARDS ---
+# --- TOP-LEVEL NAVIGATION & TABS ---
 # ==========================================
 
 # Default landing page tab is "✨ Definite Chief Aim"
@@ -621,6 +621,40 @@ with tab_aim:
             s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
 
 with tab_dashboard:
+    # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB ---
+    with st.container(border=True):
+        st.subheader("🎯 Net-Debt-Zero Visualizer")
+        net_debt = max(0.0, current_principal - total_portfolio_val)
+        nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
+        
+        xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
+
+        nd_col1, nd_col2 = st.columns([3, 1])
+        with nd_col1:
+            st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
+            st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active Console XIRR: {xirr_label}")
+        with nd_col2:
+            if is_ndz_achieved:
+                st.success("🎉 Zero Debt Achieved!")
+            else:
+                st.metric("Net Debt Pending", format_inr(net_debt))
+
+        if not is_ndz_achieved:
+            st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
+        else:
+            st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You can now service EMIs directly from portfolio withdrawals!")
+
+        st.divider()
+
+        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
+        s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
+        s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
+        s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
+        s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
+
+    st.divider()
+
     # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
     st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
