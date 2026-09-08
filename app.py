@@ -140,7 +140,7 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
         pass
     return default_nav
 
-# --- UNIVERSAL HOLDINGS PARSER (KITE CSV & CONSOLE EXCEL) ---
+# --- UNIVERSAL HOLDINGS PARSER ---
 def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_id=None):
     file_name_str = filename if filename else getattr(uploaded_file, 'name', str(uploaded_file))
     fname = file_name_str.upper()
@@ -154,59 +154,63 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
     records = []
 
     if fname.endswith(('.XLSX', '.XLS')):
-        xls = pd.ExcelFile(uploaded_file)
-        sheets = xls.sheet_names
-        sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
-        df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
-        
-        if not override_account_id:
-            for r in range(min(15, len(df_raw))):
-                row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
-                if 'Client ID' in row_vals:
-                    idx = row_vals.index('Client ID')
-                    if idx + 1 < len(row_vals):
-                        client_id = row_vals[idx + 1].upper()
-                        break
-                    
-        header_idx = -1
-        for r in range(len(df_raw)):
-            row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
-            if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
-                header_idx = r
-                break
-                
-        if header_idx != -1:
-            headers = [safe_str(x) for x in df_raw.iloc[header_idx].values]
-            df_data = df_raw.iloc[header_idx+1:].copy()
-            df_data.columns = headers
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            sheets = xls.sheet_names
+            sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
+            df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None)
             
-            for _, row in df_data.iterrows():
-                sym = safe_str(row.get('Symbol', ''))
-                if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
-                    continue
+            if not override_account_id:
+                for r in range(min(15, len(df_raw))):
+                    row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
+                    if 'Client ID' in row_vals:
+                        idx = row_vals.index('Client ID')
+                        if idx + 1 < len(row_vals):
+                            client_id = row_vals[idx + 1].upper()
+                            break
+                        
+            header_idx = -1
+            for r in range(len(df_raw)):
+                row_vals = [safe_str(x).upper() for x in df_raw.iloc[r].dropna().values]
+                if 'SYMBOL' in row_vals and 'QUANTITY AVAILABLE' in row_vals:
+                    header_idx = r
+                    break
                     
-                qty = safe_float(row.get('Quantity Available', 0.0))
-                avg_price = safe_float(row.get('Average Price', 0.0))
-                ltp = safe_float(row.get('Previous Closing Price', 0.0))
-                isin = safe_str(row.get('ISIN', ''))
-                inst_type = safe_str(row.get('Instrument Type', ''))
+            if header_idx != -1:
+                headers = [safe_str(x) for x in df_raw.iloc[header_idx].values]
+                df_data = df_raw.iloc[header_idx+1:].copy()
+                df_data.columns = headers
                 
-                asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
-                clean_sym = sym.replace('-E', '').strip()
-                
-                if qty > 0:
-                    records.append({
-                        "Account": client_id,
-                        "Symbol": clean_sym,
-                        "ISIN": isin,
-                        "Asset_Class": asset_class,
-                        "Units_Accumulated": qty,
-                        "Avg_Cost": avg_price,
-                        "Current_LTP": ltp,
-                        "Invested_Value": round(qty * avg_price, 2),
-                        "Current_Value": round(qty * ltp, 2),
-                        "P&L (₹)": round(qty * (ltp - avg_price), 2)
-                    })
+                for _, row in df_data.iterrows():
+                    sym = safe_str(row.get('Symbol', ''))
+                    if not sym or sym.upper() == 'NAN' or 'SUMMARY' in sym.upper():
+                        continue
+                        
+                    qty = safe_float(row.get('Quantity Available', 0.0))
+                    avg_price = safe_float(row.get('Average Price', 0.0))
+                    ltp = safe_float(row.get('Previous Closing Price', 0.0))
+                    isin = safe_str(row.get('ISIN', ''))
+                    inst_type = safe_str(row.get('Instrument Type', ''))
+                    
+                    asset_class = "Mutual Fund" if (inst_type != '-' and ('DEBT' in inst_type.upper() or 'MUTUAL' in inst_type.upper() or 'EQUITY' in inst_type.upper())) else "Equity / ETF"
+                    clean_sym = sym.replace('-E', '').strip()
+                    
+                    if qty > 0:
+                        records.append({
+                            "Account": client_id,
+                            "Symbol": clean_sym,
+                            "ISIN": isin,
+                            "Asset_Class": asset_class,
+                            "Units_Accumulated": qty,
+                            "Avg_Cost": avg_price,
+                            "Current_LTP": ltp,
+                            "Invested_Value": round(qty * avg_price, 2),
+                            "Current_Value": round(qty * ltp, 2),
+                            "P&L (₹)": round(qty * (ltp - avg_price), 2)
+                        })
+        except ImportError:
+            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            return client_id, pd.DataFrame()
 
     elif fname.endswith('.CSV'):
         df = pd.read_csv(uploaded_file)
@@ -564,63 +568,53 @@ with tab_aim:
         </h2>
         <div style="display: flex; flex-direction: column; gap: 12px;">
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #818CF8;">
-                <b style="color: #C7D2FE;">1. Ability & Persistent Action:</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Purpose in life. Therefore, I demand of myself persistent, continuous action toward its attainment, and I promise to render such action.</span>
+                <b style="color: #C7D2FE;">First.</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Purpose in life, therefore, I DEMAND of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.</span>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #38BDF8;">
-                <b style="color: #BAE6FD;">2. Daily Mental Picture (30 Mins):</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I realize the dominating thoughts of my mind will eventually reproduce themselves in outward, physical action. Therefore, I will concentrate my thoughts for 30 minutes daily upon the task of thinking of the person I intend to become, thereby creating a clear mental picture.</span>
+                <b style="color: #BAE6FD;">Second.</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I realize the dominating thoughts of my mind will eventually reproduce themselves in outward, physical action, and gradually transform themselves into physical reality, therefore, I will concentrate my thoughts for thirty minutes daily, upon the task of thinking of the person I intend to become, thereby creating in my mind a clear mental picture of that person.</span>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #34D399;">
-                <b style="color: #A7F3D0;">3. Auto-Suggestion (10 Mins):</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I know through the principle of auto-suggestion, any desire persistently held will eventually seek expression. Therefore, I will devote 10 minutes daily to demanding of myself the development of self-confidence.</span>
+                <b style="color: #A7F3D0;">Third.</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I know through the principle of auto-suggestion, any desire that I persistently hold in my mind will eventually seek expression through some practical means of attaining the object back of it, therefore, I will devote ten minutes daily to demanding of myself the development of SELF-CONFIDENCE.</span>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #FBBF24;">
-                <b style="color: #FDE68A;">4. Clear Description of Aim:</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I have clearly written down a description of my Definite Chief Aim in life, and I will never stop trying until I shall have developed sufficient self-confidence for its attainment.</span>
+                <b style="color: #FDE68A;">Fourth.</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I have clearly written down a description of my DEFINITE CHIEF AIM in life, and I will never stop trying, until I shall have developed sufficient self-confidence for its attainment.</span>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #F472B6;">
-                <b style="color: #FBCFE8;">5. Truth, Justice & Mutual Benefit:</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I fully realize that no wealth or position can long endure unless built upon truth and justice. I will engage in no transaction which does not benefit all whom it affects. I will eliminate hatred, envy, selfishness, and cynicism by developing love for all humanity.</span>
+                <b style="color: #FBCFE8;">Fifth.</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I fully realize that no wealth or position can long endure, unless built upon truth and justice, therefore, I will engage in no transaction which does not benefit all whom it affects. I will succeed by attracting to myself the forces I wish to use, and the cooperation of other people. I will induce others to serve me, because of my willingness to serve others. I will eliminate hatred, envy, jealousy, selfishness, and cynicism, by developing love for all humanity, because I know that a negative attitude toward others can never bring me success. I will cause others to believe in me, because I will believe in them, and in myself. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full FAITH that it will gradually influence my THOUGHTS and ACTIONS so that I will become a self-reliant, and successful person.</span>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB ---
+    # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB (ALIGNED GOAL STATE) ---
     with st.container(border=True):
-        st.subheader("🎯 Net-Debt-Zero Visualizer")
-        net_debt = max(0.0, current_principal - total_portfolio_val)
-        nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
+        st.markdown("<h3 style='margin-bottom: 0px;'>🎯 Net-Debt-Zero Visualizer</h3>", unsafe_allow_html=True)
         
-        xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
-
-        nd_col1, nd_col2 = st.columns([3, 1])
-        with nd_col1:
-            st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
-            st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active Console XIRR: {xirr_label}")
-        with nd_col2:
-            if is_ndz_achieved:
-                st.success("🎉 Zero Debt Achieved!")
-            else:
-                st.metric("Net Debt Pending", format_inr(net_debt))
-
-        if not is_ndz_achieved:
-            st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
-        else:
-            st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You can now service EMIs directly from portfolio withdrawals!")
-
+        st.progress(1.0)
+        st.caption("✨ **100.0% Covered** towards Net-Debt-Zero target | **Goal Fully Manifested**")
+        
+        st.success("🎉 **Net-Debt-Zero Fully Achieved:** Living in total financial freedom, peace of mind, and complete abundance!")
+        
         st.divider()
-
+        
         s_col1, s_col2, s_col3, s_col4 = st.columns(4)
-        pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
-        s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
-        s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
+        s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
+        
+        aligned_portfolio = max(current_principal, total_portfolio_val)
+        s_col2.metric("Portfolio Value", format_inr(aligned_portfolio))
         s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
-        s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
+        
+        goal_pnl = aligned_portfolio - total_portfolio_invested
+        goal_pnl_pct = (goal_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
+        s_col4.metric("Overall Net P&L", format_inr(goal_pnl), f"{goal_pnl_pct:+.2f}%")
 
 with tab_dashboard:
-    # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB ---
+    # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB (CURRENT REALITY) ---
     with st.container(border=True):
         st.subheader("🎯 Net-Debt-Zero Visualizer")
         net_debt = max(0.0, current_principal - total_portfolio_val)
