@@ -514,11 +514,10 @@ st.title("🏡 Home Loan & 📈 Investment Tracker")
 # --- TOP-LEVEL NAVIGATION & TABS ---
 # ==========================================
 
-# Default landing page tab is "✨ Definite Chief Aim"
 tab_aim, tab_dashboard = st.tabs(["✨ Definite Chief Aim", "📊 Loan & Investment Dashboard"])
 
 with tab_aim:
-    # --- HERO CARD: DEFINITE CHIEF AIM IN LIFE ---
+    # --- HERO CARD 1: DEFINITE CHIEF AIM IN LIFE ---
     st.markdown("""
     <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
         <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">
@@ -557,68 +556,68 @@ with tab_aim:
     </div>
     """, unsafe_allow_html=True)
 
-    # Perspective Toggle & Net-Debt-Zero Visualizer Card
+    # --- HERO CARD 2: NAPOLEON HILL'S 5-STEP SELF-CONFIDENCE FORMULA ---
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 50%, #1E293B 100%); padding: 26px; border-radius: 18px; border: 1.5px solid #818CF8; box-shadow: 0 10px 30px rgba(129, 140, 248, 0.12); margin-bottom: 25px;">
+        <h2 style="color: #A5B4FC; text-align: center; font-size: 24px; font-weight: 800; margin-bottom: 16px; letter-spacing: 0.5px;">
+            💪 Napoleon Hill's 5-Step Self-Confidence Formula
+        </h2>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #818CF8;">
+                <b style="color: #C7D2FE;">1. Ability & Persistent Action:</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Purpose in life. Therefore, I demand of myself persistent, continuous action toward its attainment, and I promise to render such action.</span>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #38BDF8;">
+                <b style="color: #BAE6FD;">2. Daily Mental Picture (30 Mins):</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I realize the dominating thoughts of my mind will eventually reproduce themselves in outward, physical action. Therefore, I will concentrate my thoughts for 30 minutes daily upon the task of thinking of the person I intend to become, thereby creating a clear mental picture.</span>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #34D399;">
+                <b style="color: #A7F3D0;">3. Auto-Suggestion (10 Mins):</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I know through the principle of auto-suggestion, any desire persistently held will eventually seek expression. Therefore, I will devote 10 minutes daily to demanding of myself the development of self-confidence.</span>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #FBBF24;">
+                <b style="color: #FDE68A;">4. Clear Description of Aim:</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I have clearly written down a description of my Definite Chief Aim in life, and I will never stop trying until I shall have developed sufficient self-confidence for its attainment.</span>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #F472B6;">
+                <b style="color: #FBCFE8;">5. Truth, Justice & Mutual Benefit:</b>
+                <span style="color: #E2E8F0; font-size: 14px;"> I fully realize that no wealth or position can long endure unless built upon truth and justice. I will engage in no transaction which does not benefit all whom it affects. I will eliminate hatred, envy, selfishness, and cynicism by developing love for all humanity.</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB ---
     with st.container(border=True):
-        st.markdown("<h3 style='margin-bottom: 0px;'>🎯 Net-Debt-Zero Visualizer</h3>", unsafe_allow_html=True)
+        st.subheader("🎯 Net-Debt-Zero Visualizer")
+        net_debt = max(0.0, current_principal - total_portfolio_val)
+        nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
         
-        mode_col1, mode_col2 = st.columns([2.5, 1.5])
-        with mode_col1:
-            perspective = st.radio(
-                "Select Perspective:",
-                ["✨ Align Vibrationally (Goal - Net-Debt-Zero Achieved)", "📊 Current Reality"],
-                horizontal=True,
-                key="perspective_toggle"
-            )
+        xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
+
+        nd_col1, nd_col2 = st.columns([3, 1])
+        with nd_col1:
+            st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
+            st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active Console XIRR: {xirr_label}")
+        with nd_col2:
+            if is_ndz_achieved:
+                st.success("🎉 Zero Debt Achieved!")
+            else:
+                st.metric("Net Debt Pending", format_inr(net_debt))
+
+        if not is_ndz_achieved:
+            st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
+        else:
+            st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You can now service EMIs directly from portfolio withdrawals!")
 
         st.divider()
 
-        if "Align Vibrationally" in perspective:
-            # VIBRATIONALLY ALIGNED GOAL STATE
-            st.progress(1.0)
-            st.caption("✨ **100.0% Covered** towards Net-Debt-Zero target | **Vibrationally Aligned Goal Achieved**")
-            
-            st.success("🎉 **Net-Debt-Zero Fully Achieved:** Living in total financial freedom, peace of mind, and complete abundance!")
-            
-            st.divider()
-            
-            s_col1, s_col2, s_col3, s_col4 = st.columns(4)
-            s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
-            s_col2.metric("Portfolio Value", format_inr(max(current_principal, total_portfolio_val)))
-            s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
-            
-            goal_pnl = max(current_principal, total_portfolio_val) - total_portfolio_invested
-            goal_pnl_pct = (goal_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
-            s_col4.metric("Overall Net P&L", format_inr(goal_pnl), f"{goal_pnl_pct:+.2f}%")
-
-        else:
-            # CURRENT REALITY
-            net_debt = max(0.0, current_principal - total_portfolio_val)
-            nd_covered_pct = (total_portfolio_val / current_principal * 100) if current_principal > 0 else 100.0
-            xirr_label = f"**{console_xirr:.2f}%**" if console_xirr is not None else "*Not Set (Import Holdings to Set)*"
-
-            nd_col1, nd_col2 = st.columns([3, 1])
-            with nd_col1:
-                st.progress(min(total_portfolio_val / current_principal, 1.0) if current_principal > 0 else 1.0)
-                st.caption(f"**{nd_covered_pct:.1f}% Covered** towards Net-Debt-Zero target | Active Console XIRR: {xirr_label}")
-            with nd_col2:
-                if is_ndz_achieved:
-                    st.success("🎉 Zero Debt Achieved!")
-                else:
-                    st.metric("Net Debt Pending", format_inr(net_debt))
-
-            if not is_ndz_achieved:
-                st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
-            else:
-                st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You can now service EMIs directly from portfolio withdrawals!")
-
-            st.divider()
-
-            s_col1, s_col2, s_col3, s_col4 = st.columns(4)
-            pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
-            s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
-            s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
-            s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
-            s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
+        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        pct_principal_cleared = (total_principal_cleared / INITIAL_LOAN * 100) if INITIAL_LOAN > 0 else 0.0
+        s_col1.metric("Principal Pending", format_inr(current_principal), f"{pct_principal_cleared:.1f}% Loan Cleared")
+        s_col2.metric("Portfolio Value", format_inr(total_portfolio_val))
+        s_col3.metric("Total Invested", format_inr(total_portfolio_invested))
+        s_col4.metric("Overall Net P&L", format_inr(overall_pnl), f"{overall_pnl_pct:+.2f}%")
 
 with tab_dashboard:
     # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB ---
