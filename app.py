@@ -536,25 +536,46 @@ with tab_aim:
                 <h3 style="color: #FFD166; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                     🧘 For Happiness
                 </h3>
-                <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
-                    Practice gratitude and meditation.
-                </p>
+                <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #FFD166;">✦</span> Practice gratitude and meditation.
+                    </li>
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #FFD166;">✦</span> Read at least 1 page of Self-Help books.
+                    </li>
+                </ul>
             </div>
             <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #06D6A0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
                 <h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                     🥗 For Health
                 </h3>
-                <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
-                    Eat healthy and nourishing food. Appreciate my natural health and body.
-                </p>
+                <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #06D6A0;">✦</span> Eat healthy and nourishing food.
+                    </li>
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #06D6A0;">✦</span> Get good sound sleep.
+                    </li>
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #06D6A0;">✦</span> Appreciate my natural health.
+                    </li>
+                </ul>
             </div>
             <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
                 <h3 style="color: #4CC9F0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                     💎 For Wealth
                 </h3>
-                <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
-                    Provide valuable and efficient service joyfully. Donate to people in need. Celebrate financial abundance around me.
-                </p>
+                <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #4CC9F0;">✦</span> Provide valuable and efficient service joyfully.
+                    </li>
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #4CC9F0;">✦</span> Donate to people in need.
+                    </li>
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #4CC9F0;">✦</span> Celebrate financial abundance around the world.
+                    </li>
+                </ul>
             </div>
         </div>
     </div>
@@ -604,7 +625,9 @@ with tab_aim:
         
         s_col1, s_col2 = st.columns(2)
         s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
-        s_col2.metric("Portfolio Value", "₹1,00,00,000", "1 Cr - Total Financial Abundance")
+        
+        aligned_portfolio = max(current_principal, total_portfolio_val)
+        s_col2.metric("Portfolio Value", format_inr(aligned_portfolio))
 
 with tab_dashboard:
     # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB (CURRENT REALITY) ---
