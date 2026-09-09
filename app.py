@@ -525,7 +525,7 @@ with tab_aim:
     st.markdown("""
     <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
         <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">
-            🌟 My Definite Chief Aim
+            🌟 My Definite Chief Aim in Life
         </h2>
         <p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">
             "My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."
@@ -545,7 +545,7 @@ with tab_aim:
                     🥗 For Health
                 </h3>
                 <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
-                    Eat healthy and nourishing food. Get good sound sleep. Appreciate my natural health.
+                    Eat healthy and nourishing food. Appreciate my natural health and body.
                 </p>
             </div>
             <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
@@ -553,7 +553,7 @@ with tab_aim:
                     💎 For Wealth
                 </h3>
                 <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
-                    Provide valuable and efficient service joyfully. Donate to people in need. Celebrate financial abundance around the world.
+                    Provide valuable and efficient service joyfully. Donate to people in need. Celebrate financial abundance around me.
                 </p>
             </div>
         </div>
@@ -569,7 +569,7 @@ with tab_aim:
         <div style="display: flex; flex-direction: column; gap: 12px;">
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #818CF8;">
                 <b style="color: #C7D2FE;">First.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Chief Aim in life, therefore, I DEMAND of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.</span>
+                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Purpose in life, therefore, I DEMAND of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.</span>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #38BDF8;">
                 <b style="color: #BAE6FD;">Second.</b>
@@ -585,7 +585,7 @@ with tab_aim:
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #F472B6;">
                 <b style="color: #FBCFE8;">Fifth.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I fully realize that no wealth or position can long endure, unless built upon truth and justice, therefore, I will engage in no transaction which does not benefit all whom it affects. I will succeed by attracting to myself the forces I wish to use, and the cooperation of other people. I will induce others to serve me, because of my willingness to serve others. I will eliminate hatred, envy, jealousy, selfishness, and cynicism, by developing love for all humanity, because I know that a negative attitude toward others can never bring me success. I will cause others to believe in me, because I will believe in them, and in myself. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full FAITH that it will gradually influence my THOUGHTS and ACTIONS so that I will become a self-reliant, and successful person. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full FAITH that it will gradually influence my THOUGHTS and ACTIONS so that I will become a self-reliant, and successful person.</span>
+                <span style="color: #E2E8F0; font-size: 14px;"> I fully realize that no wealth or position can long endure, unless built upon truth and justice, therefore, I will engage in no transaction which does not benefit all whom it affects. I will succeed by attracting to myself the forces I wish to use, and the cooperation of other people. I will induce others to serve me, because of my willingness to serve others. I will eliminate hatred, envy, jealousy, selfishness, and cynicism, by developing love for all humanity, because I know that a negative attitude toward others can never bring me success. I will cause others to believe in me, because I will believe in them, and in myself. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full FAITH that it will gradually influence my THOUGHTS and ACTIONS so that I will become a self-reliant, and successful person.</span>
             </div>
         </div>
     </div>
@@ -882,54 +882,54 @@ with tab_dashboard:
                             st.error(f"Failed to update Google Sheets: {e}")
 
     # Section 2A: Equity & ETF Holdings
-    st.markdown("#### 📊 Equity & ETF Holdings")
-    if df_eq_active.empty:
-        st.info("No active Equity/ETF holdings found in 'Portfolio_Tracker' tab.")
-    else:
-        for _, row in df_eq_active.iterrows():
-            sym = row["Symbol"]
-            acc = row["Account"]
-            units = row["Units_Accumulated"]
-            ltp = row["Current_LTP"]
-            inv = row["Invested_Value"]
-            curr = row["Current_Value"]
-            pnl = row["P&L (₹)"]
-            pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-            
-            with st.container(border=True):
-                st.markdown(
-                    f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", 
-                    unsafe_allow_html=True
-                )
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Invested", format_inr(inv))
-                m2.metric("Current Value", format_inr(curr))
-                m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+    with st.expander("📊 Equity & ETF Holdings", expanded=False):
+        if df_eq_active.empty:
+            st.info("No active Equity/ETF holdings found in 'Portfolio_Tracker' tab.")
+        else:
+            for _, row in df_eq_active.iterrows():
+                sym = row["Symbol"]
+                acc = row["Account"]
+                units = row["Units_Accumulated"]
+                ltp = row["Current_LTP"]
+                inv = row["Invested_Value"]
+                curr = row["Current_Value"]
+                pnl = row["P&L (₹)"]
+                pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
+                
+                with st.container(border=True):
+                    st.markdown(
+                        f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", 
+                        unsafe_allow_html=True
+                    )
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Invested", format_inr(inv))
+                    m2.metric("Current Value", format_inr(curr))
+                    m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
     # Section 2B: Mutual Fund Holdings
-    st.markdown("#### 💼 Mutual Fund Holdings")
-    if df_mf_active.empty:
-        st.info("No active Mutual Fund holdings found in 'Portfolio_Tracker' tab.")
-    else:
-        for _, row in df_mf_active.iterrows():
-            sym = row["Symbol"]
-            acc = row["Account"]
-            units = row["Units_Accumulated"]
-            ltp = row["Current_LTP"]
-            inv = row["Invested_Value"]
-            curr = row["Current_Value"]
-            pnl = row["P&L (₹)"]
-            pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-            
-            with st.container(border=True):
-                st.markdown(
-                    f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", 
-                    unsafe_allow_html=True
-                )
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Invested", format_inr(inv))
-                m2.metric("Current Value", format_inr(curr))
-                m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+    with st.expander("💼 Mutual Fund Holdings", expanded=False):
+        if df_mf_active.empty:
+            st.info("No active Mutual Fund holdings found in 'Portfolio_Tracker' tab.")
+        else:
+            for _, row in df_mf_active.iterrows():
+                sym = row["Symbol"]
+                acc = row["Account"]
+                units = row["Units_Accumulated"]
+                ltp = row["Current_LTP"]
+                inv = row["Invested_Value"]
+                curr = row["Current_Value"]
+                pnl = row["P&L (₹)"]
+                pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
+                
+                with st.container(border=True):
+                    st.markdown(
+                        f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", 
+                        unsafe_allow_html=True
+                    )
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Invested", format_inr(inv))
+                    m2.metric("Current Value", format_inr(curr))
+                    m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
 
     st.divider()
 
