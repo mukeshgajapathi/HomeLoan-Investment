@@ -525,7 +525,7 @@ with tab_aim:
     st.markdown("""
     <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
         <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">
-            🌟 My Definite Chief Aim in Life
+            🌟 My Definite Chief Aim
         </h2>
         <p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">
             "My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."
@@ -569,7 +569,7 @@ with tab_aim:
         <div style="display: flex; flex-direction: column; gap: 12px;">
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #818CF8;">
                 <b style="color: #C7D2FE;">First.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Purpose in life, therefore, I DEMAND of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.</span>
+                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Chief Aim in life, therefore, I DEMAND of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.</span>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #38BDF8;">
                 <b style="color: #BAE6FD;">Second.</b>
