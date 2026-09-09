@@ -543,6 +543,9 @@ with tab_aim:
                     <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
                         <span style="color: #FFD166;">✦</span> Read at least 1 page of Self-Help books.
                     </li>
+                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                        <span style="color: #FFD166;">✦</span> Emotional Guidance System: Focus on how you feel.
+                    </li>
                 </ul>
             </div>
             <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #06D6A0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
