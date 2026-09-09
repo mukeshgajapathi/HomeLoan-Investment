@@ -545,7 +545,7 @@ with tab_aim:
                     🥗 For Health
                 </h3>
                 <p style="color: #E2E8F0; font-size: 14.5px; margin: 0; line-height: 1.6; font-weight: 400;">
-                    Eat healthy and nourishing food. Appreciate my natural health and body.
+                    Eat healthy and nourishing food. Get good sound sleep. Appreciate my natural health.
                 </p>
             </div>
             <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
