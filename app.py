@@ -554,7 +554,7 @@ with tab_aim:
                 </h3>
                 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
                     <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #06D6A0;">✦</span> Eat healthy and nourishing food.
+                        <span style="color: #06D6A0;">✦</span> Eat healthy and nourishing food (🥚 Eggetarian Diet).
                     </li>
                     <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
                         <span style="color: #06D6A0;">✦</span> Get good sound sleep.
