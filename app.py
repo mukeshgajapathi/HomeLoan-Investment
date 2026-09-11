@@ -524,34 +524,33 @@ with tab_aim:
     # --- HERO CARD 1: DEFINITE CHIEF AIM IN LIFE ---
     st.markdown("""
 <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
-<h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🌟 My Definite Chief Aim in Life</h2>
-<p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."</p>
+<h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🌟 My Commitment to the Advancing Life</h2>
+<p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"In return for the harmonious and abundant life I desire, I commit to the following principles of creative action, knowing that true wealth is built upon truth, justice, and mutual benefit."</p>
 <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
-<p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">In return for this harmonious and abundant life, I commit to the following:</p>
 <div style="display: flex; gap: 16px; flex-wrap: wrap;">
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #FFD166; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-<h3 style="color: #FFD166; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🧘 To Cultivate Happiness (Mind & Spirit)</h3>
+<h3 style="color: #FFD166; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🧘 To Cultivate Happiness (Mind & Spirit):</h3>
 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Emotional Guidance System: Feel Good.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Gratitude (Link to god).</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Meditation.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Read at least 1 page of Self-Help books.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Practice daily gratitude, acknowledging the Source of all abundance.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Engage in regular meditation to maintain a clear and focused mind.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Read at least 1 page of Self-Help literature daily to continuously expand my consciousness.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #FFD166;">✦</span> Utilize my Emotional Guidance System: Always focus on feeling good and maintaining a positive vibration.</li>
 </ul>
 </div>
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #06D6A0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-<h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🥗 To Nurture Health (The Physical Vessel)</h3>
+<h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🥗 To Nurture Health (The Physical Vessel):</h3>
 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Healthy and Nourishing eggetarian diet.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Get good sound sleep.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Appreciate my natural health.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Nourish my body with a healthy, eggetarian diet.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Ensure good, sound sleep to rejuvenate my energy.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Deeply appreciate my natural health and the physical capabilities I possess.</li>
 </ul>
 </div>
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-<h3 style="color: #4CC9F0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">💎 To Manifest Wealth (Creative Contribution)</h3>
+<h3 style="color: #4CC9F0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">💎 To Manifest Wealth (Creative Contribution):</h3>
 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Valuable and efficient service joyfully.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Donate to people in need.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate financial abundance around the world.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Provide valuable and efficient service joyfully, giving more in use value than I receive in monetary value.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Donate generously to people in need, participating in the flow of abundance.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate financial abundance everywhere, recognizing that the supply is limitless for all.</li>
 </ul>
 </div>
 </div>
