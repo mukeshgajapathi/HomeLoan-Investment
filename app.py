@@ -532,7 +532,7 @@ with tab_aim:
     </p>
     <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
 
-    <div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
+<div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
         <p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">
             In return for this harmonious and abundant life, I commit to the following:
         </p>
