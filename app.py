@@ -523,107 +523,107 @@ tab_aim, tab_dashboard = st.tabs(["✨ Definite Chief Aim", "📊 Loan & Investm
 with tab_aim:
     # --- HERO CARD 1: DEFINITE CHIEF AIM IN LIFE ---
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
-        <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">
-            🌟 My Definite Chief Aim in Life
-        </h2>
-        <p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">
-            "My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."
+<div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
+    <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">
+        🌟 My Definite Chief Aim in Life
+    </h2>
+    <p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">
+        "My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."
+    </p>
+    <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
+
+    <div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
+        <p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">
+            In return for this harmonious and abundant life, I commit to the following:
         </p>
-        <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
+        
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #FFD166; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                🧘 To Cultivate Happiness (Mind & Spirit)
+            </h3>
+            <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #FFD166;">✦</span> Emotional Guidance System: Feel Good.
+                </li>
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #FFD166;">✦</span> Gratitude (Link to god).
+                </li>
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #FFD166;">✦</span> Meditation.
+                </li>
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #FFD166;">✦</span> Read at least 1 page of Self-Help books.
+                </li>
+            </ul>
+        </div>
 
-        <div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-            <p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">
-                In return for this harmonious and abundant life, I commit to the following:
-            </p>
-            
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #FFD166; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                    🧘 To Cultivate Happiness (Mind & Spirit)
-                </h3>
-                <ul style="list-style-type: none; padding-left: 0; margin: 0;">
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #FFD166;">✦</span> Emotional Guidance System: Feel Good.
-                    </li>
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #FFD166;">✦</span> Gratitude (Link to god).
-                    </li>
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #FFD166;">✦</span> Meditation.
-                    </li>
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #FFD166;">✦</span> Read at least 1 page of Self-Help books.
-                    </li>
-                </ul>
-            </div>
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                🥗 To Nurture Health (The Physical Vessel)
+            </h3>
+            <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #06D6A0;">✦</span> Healthy and Nourishing eggetarian diet.
+                </li>
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #06D6A0;">✦</span> Get good sound sleep.
+                </li>
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #06D6A0;">✦</span> Appreciate my natural health.
+                </li>
+            </ul>
+        </div>
 
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                    🥗 To Nurture Health (The Physical Vessel)
-                </h3>
-                <ul style="list-style-type: none; padding-left: 0; margin: 0;">
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #06D6A0;">✦</span> Healthy and Nourishing eggetarian diet.
-                    </li>
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #06D6A0;">✦</span> Get good sound sleep.
-                    </li>
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #06D6A0;">✦</span> Appreciate my natural health.
-                    </li>
-                </ul>
-            </div>
-
-            <div>
-                <h3 style="color: #4CC9F0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                    💎 To Manifest Wealth (Creative Contribution)
-                </h3>
-                <ul style="list-style-type: none; padding-left: 0; margin: 0;">
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #4CC9F0;">✦</span> Valuable and efficient service joyfully.
-                    </li>
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #4CC9F0;">✦</span> Donate to people in need.
-                    </li>
-                    <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
-                        <span style="color: #4CC9F0;">✦</span> Celebrate financial abundance around the world.
-                    </li>
-                </ul>
-            </div>
+        <div>
+            <h3 style="color: #4CC9F0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                💎 To Manifest Wealth (Creative Contribution)
+            </h3>
+            <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #4CC9F0;">✦</span> Valuable and efficient service joyfully.
+                </li>
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #4CC9F0;">✦</span> Donate to people in need.
+                </li>
+                <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;">
+                    <span style="color: #4CC9F0;">✦</span> Celebrate financial abundance around the world.
+                </li>
+            </ul>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+</div>
+""", unsafe_allow_html=True)
 
     # --- HERO CARD 2: NAPOLEON HILL'S 5-STEP SELF-CONFIDENCE FORMULA ---
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 50%, #1E293B 100%); padding: 26px; border-radius: 18px; border: 1.5px solid #818CF8; box-shadow: 0 10px 30px rgba(129, 140, 248, 0.12); margin-bottom: 25px;">
-        <h2 style="color: #A5B4FC; text-align: center; font-size: 24px; font-weight: 800; margin-bottom: 16px; letter-spacing: 0.5px;">
-            💪 Napoleon Hill's 5-Step Self-Confidence Formula
-        </h2>
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #818CF8;">
-                <b style="color: #C7D2FE;">First.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Purpose in life, therefore, I DEMAND of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.</span>
-            </div>
-            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #38BDF8;">
-                <b style="color: #BAE6FD;">Second.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I realize the dominating thoughts of my mind will eventually reproduce themselves in outward, physical action, and gradually transform themselves into physical reality, therefore, I will concentrate my thoughts for thirty minutes daily, upon the task of thinking of the person I intend to become, thereby creating in my mind a clear mental picture of that person.</span>
-            </div>
-            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #34D399;">
-                <b style="color: #A7F3D0;">Third.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I know through the principle of auto-suggestion, any desire that I persistently hold in my mind will eventually seek expression through some practical means of attaining the object back of it, therefore, I will devote ten minutes daily to demanding of myself the development of SELF-CONFIDENCE.</span>
-            </div>
-            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #FBBF24;">
-                <b style="color: #FDE68A;">Fourth.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I have clearly written down a description of my DEFINITE CHIEF AIM in life, and I will never stop trying, until I shall have developed sufficient self-confidence for its attainment.</span>
-            </div>
-            <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #F472B6;">
-                <b style="color: #FBCFE8;">Fifth.</b>
-                <span style="color: #E2E8F0; font-size: 14px;"> I fully realize that no wealth or position can long endure, unless built upon truth and justice, therefore, I will engage in no transaction which does not benefit all whom it affects. I will succeed by attracting to myself the forces I wish to use, and the cooperation of other people. I will induce others to serve me, because of my willingness to serve others. I will eliminate hatred, envy, jealousy, selfishness, and cynicism, by developing love for all humanity, because I know that a negative attitude toward others can never bring me success. I will cause others to believe in me, because I will believe in them, and in myself. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full FAITH that it will gradually influence my THOUGHTS and ACTIONS so that I will become a self-reliant, and successful person.</span>
-            </div>
+<div style="background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 50%, #1E293B 100%); padding: 26px; border-radius: 18px; border: 1.5px solid #818CF8; box-shadow: 0 10px 30px rgba(129, 140, 248, 0.12); margin-bottom: 25px;">
+    <h2 style="color: #A5B4FC; text-align: center; font-size: 24px; font-weight: 800; margin-bottom: 16px; letter-spacing: 0.5px;">
+        💪 Napoleon Hill's 5-Step Self-Confidence Formula
+    </h2>
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #818CF8;">
+            <b style="color: #C7D2FE;">First.</b>
+            <span style="color: #E2E8F0; font-size: 14px;"> I know that I have the ability to achieve the object of my Definite Purpose in life, therefore, I DEMAND of myself persistent, continuous action toward its attainment, and I here and now promise to render such action.</span>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #38BDF8;">
+            <b style="color: #BAE6FD;">Second.</b>
+            <span style="color: #E2E8F0; font-size: 14px;"> I realize the dominating thoughts of my mind will eventually reproduce themselves in outward, physical action, and gradually transform themselves into physical reality, therefore, I will concentrate my thoughts for thirty minutes daily, upon the task of thinking of the person I intend to become, thereby creating in my mind a clear mental picture of that person.</span>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #34D399;">
+            <b style="color: #A7F3D0;">Third.</b>
+            <span style="color: #E2E8F0; font-size: 14px;"> I know through the principle of auto-suggestion, any desire that I persistently hold in my mind will eventually seek expression through some practical means of attaining the object back of it, therefore, I will devote ten minutes daily to demanding of myself the development of SELF-CONFIDENCE.</span>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #FBBF24;">
+            <b style="color: #FDE68A;">Fourth.</b>
+            <span style="color: #E2E8F0; font-size: 14px;"> I have clearly written down a description of my DEFINITE CHIEF AIM in life, and I will never stop trying, until I shall have developed sufficient self-confidence for its attainment.</span>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 14px 18px; border-radius: 10px; border-left: 4px solid #F472B6;">
+            <b style="color: #FBCFE8;">Fifth.</b>
+            <span style="color: #E2E8F0; font-size: 14px;"> I fully realize that no wealth or position can long endure, unless built upon truth and justice, therefore, I will engage in no transaction which does not benefit all whom it affects. I will succeed by attracting to myself the forces I wish to use, and the cooperation of other people. I will induce others to serve me, because of my willingness to serve others. I will eliminate hatred, envy, jealousy, selfishness, and cynicism, by developing love for all humanity, because I know that a negative attitude toward others can never bring me success. I will cause others to believe in me, because I will believe in them, and in myself. I will sign my name to this formula, commit it to memory, and repeat it aloud once a day, with full FAITH that it will gradually influence my THOUGHTS and ACTIONS so that I will become a self-reliant, and successful person.</span>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+</div>
+""", unsafe_allow_html=True)
 
     # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB (ALIGNED GOAL STATE) ---
     with st.container(border=True):
@@ -638,9 +638,7 @@ with tab_aim:
         
         s_col1, s_col2 = st.columns(2)
         s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
-        
-        aligned_portfolio = max(current_principal, total_portfolio_val)
-        s_col2.metric("Portfolio Value", format_inr(aligned_portfolio))
+        s_col2.metric("Portfolio Value", "₹1,00,00,000", "1 Cr - Total Financial Abundance")
 
 with tab_dashboard:
     # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB (CURRENT REALITY) ---
