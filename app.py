@@ -537,7 +537,7 @@ with tab_aim:
             In return for this harmonious and abundant life, I commit to the following:
         </p>
         
-        <div style="margin-bottom: 20px;">
+    <div style="margin-bottom: 20px;">
             <h3 style="color: #FFD166; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                 🧘 To Cultivate Happiness (Mind & Spirit)
             </h3>
@@ -557,7 +557,7 @@ with tab_aim:
             </ul>
         </div>
 
-        <div style="margin-bottom: 20px;">
+    <div style="margin-bottom: 20px;">
             <h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                 🥗 To Nurture Health (The Physical Vessel)
             </h3>
