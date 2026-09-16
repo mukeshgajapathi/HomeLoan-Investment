@@ -540,11 +540,11 @@ with tab_aim:
 </ul>
 </div>
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #06D6A0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-<h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🥗 To Nurture Health (The Physical Vessel)</h3>
+<h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🥗 To Nurture Health (The Temple)</h3>
 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Nourish my body with a healthy, eggetarian diet.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Ensure good, sound sleep to rejuvenate my energy.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Deeply appreciate my natural health and the physical capabilities I possess.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Exercise Regularly </li>
 </ul>
 </div>
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
@@ -553,6 +553,7 @@ with tab_aim:
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Provide valuable and efficient service joyfully, giving more in use value than I receive in monetary value.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Donate generously to people in need, participating in the flow of abundance.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate financial abundance everywhere, recognizing that the supply is limitless for all.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Practice Persistense and Stay Invested in the Market </li>
 </ul>
 </div>
 </div>
