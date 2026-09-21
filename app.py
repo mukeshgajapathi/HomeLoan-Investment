@@ -610,7 +610,7 @@ with tab_dashboard:
     # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
     st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-m_col1, m_col2, m_col3 = st.columns(3)
+    m_col1, m_col2, m_col3 = st.columns(3)
     
     with m_col1:
         st.markdown(f"**{active_due_label}**<br>{format_inr(active_due_amount)}<br><span style='color:#00CC96; font-size:13.5px;'>{disbursement_badge}</span>", unsafe_allow_html=True)
