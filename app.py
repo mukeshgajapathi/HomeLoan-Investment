@@ -883,7 +883,7 @@ with tab_dashboard:
     st.divider()
 
 # --- SECTION 3: INTUITIVE PART PAYMENTS ---
-    st.subheader("3. 🌱 The Abundance Approach to Financial Freedom")
+    st.subheader("3. 🌱 The Abundance Approach to Part Payments")
     
     with st.container(border=True):
         
