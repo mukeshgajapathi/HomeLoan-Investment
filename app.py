@@ -305,38 +305,6 @@ def calculate_loan_state(df_loan, initial_loan, current_global_rate):
     p_balance = max(0.0, p_balance)
     return p_balance, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared
 
-def get_current_year_prepayment_status(df_loan):
-    if not df_loan.empty and "date" in [c.lower() for c in df_loan.columns]:
-        df_temp = df_loan.copy()
-        df_temp.columns = [c.lower() for c in df_temp.columns]
-        df_temp["date_dt"] = pd.to_datetime(df_temp["date"], errors="coerce")
-        df_temp = df_temp.dropna(subset=["date_dt"]).sort_values("date_dt")
-        
-        df_full = df_temp[df_temp["payment_type"].astype(str).str.contains("Full EMI|Prepayment", case=False, na=False)]
-        
-        if not df_full.empty:
-            start_date = df_full.iloc[0]["date_dt"]
-        else:
-            start_date = pd.to_datetime("2027-06-01")
-            
-        now = datetime.now()
-        if now < start_date:
-            return False
-            
-        elapsed_months = (now.year - start_date.year) * 12 + (now.month - start_date.month)
-        current_year_num = max(1, (elapsed_months // 12) + 1)
-        
-        year_start_date = start_date + pd.DateOffset(months=(current_year_num - 1) * 12)
-        prepays_this_year_df = df_temp[
-            (df_temp["payment_type"].astype(str).str.contains("Prepayment", case=False, na=False)) & 
-            (df_temp["date_dt"] >= year_start_date)
-        ]
-        
-        has_prepay_this_year = prepays_this_year_df["payment_type"].astype(str).str.contains("Prepayment", case=False, na=False).any()
-        return has_prepay_this_year
-
-    return False
-
 def project_ndz_target(current_principal, current_portfolio, current_rate, full_emi, is_handover, xirr_rate):
     if current_portfolio >= current_principal:
         return "Achieved", 0, 0
@@ -914,156 +882,36 @@ with tab_dashboard:
 
     st.divider()
 
-    # --- SECTION 3: REVISED REPAYMENT & NDZ STRATEGY ENGINE ---
-    st.subheader("3. Part Payment & Prepayment Engine")
-
-    has_annual_prepay_executed = get_current_year_prepayment_status(df_loan)
-
-    # Determine Dynamic Multipliers and Percentages based on Tier
-    allowed_multiplier = 0
-    allowed_corpus_pct = 0.0
+    # --- SECTION 3: INTUITIVE PART PAYMENTS ---
+    st.subheader("3. Intuitive Part Payments")
     
-    if console_xirr is not None:
-        if console_xirr > 14.0:
-            allowed_multiplier = 4
-            allowed_corpus_pct = 0.08
-        elif console_xirr > 10.0:
-            allowed_multiplier = 3
-            allowed_corpus_pct = 0.06
-        elif console_xirr > 8.0:
-            allowed_multiplier = 2
-            allowed_corpus_pct = 0.04
-            
-    target_prepay = allowed_multiplier * full_emi if allowed_multiplier > 0 else 0
-    target_corpus_prepay = allowed_corpus_pct * total_portfolio_val if allowed_corpus_pct > 0 else 0.04 * total_portfolio_val
-
-    # UI Information Headers
     with st.container(border=True):
-        c_l1, c_l2 = st.columns(2)
-        with c_l1:
-            st.info("🎯 **Primary Objective:** Direct all surplus monthly savings into building your investment portfolio corpus until Net-Debt-Zero is achieved.")
-        with c_l2:
-            st.success("🔓 **Unlocks Upon Net-Debt-Zero:**\n**Dynamic Corpus Prepayment:** Swap from the dynamic EMI strategy to massive portfolio corpus prepayments (4% to 8%) based on XIRR tiers to rapidly annihilate the final debt balance.")
-
-    st.markdown("### 🚦 Dynamic Annual Prepayment Rule Status")
-    st.caption("ℹ️ **Strategy:** Harvest portfolio profits based on market momentum (XIRR tiers) to crush loan principal. Limited to **1 time per loan year**.")
-    
-    rule_col1, rule_col2, rule_col3 = st.columns(3)
-    
-    # Context-aware target display
-    if is_ndz_achieved:
-        if allowed_corpus_pct > 0:
-            rule_col1.metric("Dynamic Corpus Target", format_inr(target_corpus_prepay), f"{int(allowed_corpus_pct*100)}% Corpus Unlocked")
-        else:
-            rule_col1.metric("Dynamic Corpus Target", "₹0", "Locked (XIRR ≤ 8%)", delta_color="off")
-    else:
-        if allowed_multiplier > 0:
-            rule_col1.metric("Dynamic EMI Target", format_inr(target_prepay), f"{allowed_multiplier}x EMI Unlocked")
-        else:
-            rule_col1.metric("Dynamic EMI Target", "₹0", "Locked (XIRR ≤ 8%)", delta_color="off")
-    
-    is_xirr_valid = allowed_multiplier > 0
-    
-    with rule_col2:
-        st.markdown("**Console XIRR Status**")
-        if console_xirr is None:
-            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 NOT SET</span>", unsafe_allow_html=True)
-        elif console_xirr > 14.0:
-            st.markdown(f"<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 {console_xirr:.2f}% (Tier 3: > 14%)</span>", unsafe_allow_html=True)
-        elif console_xirr > 10.0:
-            st.markdown(f"<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 {console_xirr:.2f}% (Tier 2: > 10%)</span>", unsafe_allow_html=True)
-        elif console_xirr > 8.0:
-            st.markdown(f"<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 {console_xirr:.2f}% (Tier 1: > 8%)</span>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 {console_xirr:.2f}% (≤ 8%)</span>", unsafe_allow_html=True)
-
-    with rule_col3:
-        st.markdown("**Prepayment Requirement**")
-        if has_annual_prepay_executed:
-            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 EXECUTED THIS YEAR (1/1 Used)</span>", unsafe_allow_html=True)
-        elif is_xirr_valid:
-            st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 UNLOCKED</span>", unsafe_allow_html=True)
-        else:
-            st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 LOCKED</span>", unsafe_allow_html=True)
-
-    st.markdown("### 💸 Execute Strategy Action")
-
-    prepay_strategy_type = st.radio(
-        "Select Action Strategy:",
-        options=[
-            "Execute Dynamic Annual EMI Prepayment (Requires XIRR > 8%)",
-            "Execute Dynamic Portfolio Corpus Prepayment (Requires Net-Debt-Zero & XIRR > 8%)"
-        ],
-        horizontal=True
-    )
-
-    pp_input_col1, pp_input_col2 = st.columns(2)
-
-    if "Dynamic Annual EMI" in prepay_strategy_type:
-        enable_pp = is_xirr_valid and (not has_annual_prepay_executed)
+        st.info("🌱 **The Abundance Approach:** No rigid rules. No forced withdrawals. When your intuition signals, or when surplus cash flows into your life, use this portal to instantly channel that energy into destroying your loan principal.")
+        
+        pp_input_col1, pp_input_col2 = st.columns(2)
         
         with pp_input_col1:
-            if not is_xirr_valid:
-                st.warning("🔒 Console XIRR must be strictly > 8.0% to unlock dynamic annual prepayments.")
-            elif has_annual_prepay_executed:
-                st.warning("🔒 An annual prepayment has already been executed for this loan year.")
-            else:
-                st.info(f"🔓 **Strategy Unlocked!** You qualify for a **{allowed_multiplier}x EMI** prepayment based on your {console_xirr:.2f}% XIRR.")
-
-        with pp_input_col2:
-            pp_amount = st.number_input(
-                "Prepayment Amount (₹)", 
-                value=float(target_prepay) if target_prepay > 0 else float(2*full_emi), 
-                disabled=not enable_pp
-            )
-        logged_payment_type = f"Prepayment ({allowed_multiplier}x EMI)" if allowed_multiplier > 0 else "Prepayment (Dynamic EMI)"
-        
-        # Action Preview Calculation
-        principal_reduction = pp_amount if enable_pp else 0.0
-        new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
-        months_saved = max(0, round(current_rem_months - new_rem_months))
-        st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
-
-    else: # Execute Dynamic Portfolio Corpus Prepayment
-        enable_pp = is_ndz_achieved and is_xirr_valid and (not has_annual_prepay_executed)
-        with pp_input_col1:
-            if not is_ndz_achieved:
-                st.warning(
-                    f"🔒 **Net-Debt-Zero Pending:** You cannot execute the corpus prepayment until your portfolio value ({format_inr(total_portfolio_val)}) exceeds your remaining loan principal ({format_inr(current_principal)})."
-                )
-            elif not is_xirr_valid:
-                st.warning("🔒 Console XIRR must be strictly > 8.0% to unlock dynamic corpus prepayments.")
-            elif has_annual_prepay_executed:
-                st.warning("🔒 An annual prepayment has already been executed for this loan year.")
-            else:
-                st.info(f"🔓 **Net-Debt-Zero Achieved!** You qualify for an aggressive **{int(allowed_corpus_pct*100)}% Corpus** prepayment based on your {console_xirr:.2f}% XIRR.")
+            st.markdown("### 💸 Execute Part Payment")
+            pp_amount = st.number_input("Prepayment Amount (₹)", value=100000.0, step=10000.0, min_value=1.0)
             
+            if st.button("Log Part Payment to Sheet", type="primary"):
+                new_row = pd.DataFrame([{
+                    "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                    "Month_Year": datetime.now().strftime("%b %Y"), 
+                    "Expected_Payment": pp_amount, 
+                    "Actual_Payment": pp_amount, 
+                    "Payment_Type": "Part Payment", 
+                    "Confirmed": True,
+                    "Interest_Rate": current_interest_rate
+                }])
+                conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
+                st.success(f"Executed Part Payment of {format_inr(pp_amount)} successfully!")
+                st.cache_data.clear()
+                st.rerun()
+                
         with pp_input_col2:
-            pp_amount = st.number_input(
-                "Prepayment Amount (₹)", 
-                value=float(target_corpus_prepay) if target_corpus_prepay > 0 else float(0.04 * total_portfolio_val), 
-                step=5000.0,
-                disabled=not enable_pp
-            )
-        logged_payment_type = f"Prepayment ({int(allowed_corpus_pct*100)}% Corpus)" if allowed_corpus_pct > 0 else "Prepayment (Dynamic Corpus)"
-        
-        # Action Preview Calculation
-        principal_reduction = pp_amount if enable_pp else 0.0
-        new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
-        months_saved = max(0, round(current_rem_months - new_rem_months))
-        st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
-
-    if st.button("Execute Strategy Action & Log to Sheet", disabled=not enable_pp, type="primary"):
-        new_row = pd.DataFrame([{
-            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-            "Month_Year": datetime.now().strftime("%b %Y"), 
-            "Expected_Payment": pp_amount if "Prepayment" in logged_payment_type else expected_loan, 
-            "Actual_Payment": pp_amount, 
-            "Payment_Type": logged_payment_type, 
-            "Confirmed": True,
-            "Interest_Rate": current_interest_rate
-        }])
-        conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-        st.success(f"Executed {logged_payment_type} of {format_inr(pp_amount)} successfully!")
-        st.cache_data.clear()
-        st.rerun()
+            st.markdown("### 🔮 Impact Preview")
+            principal_reduction = pp_amount
+            new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
+            months_saved = max(0, round(current_rem_months - new_rem_months))
+            st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
