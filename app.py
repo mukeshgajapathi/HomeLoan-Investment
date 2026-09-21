@@ -420,7 +420,6 @@ df_portfolio_raw, df_loan, disbursed_ratio, is_handover_completed, current_inter
 # Process Holdings Data
 eq_rows = []
 mf_rows = []
-recovery_rows = []
 
 if not df_portfolio_raw.empty:
     for _, row in df_portfolio_raw.iterrows():
@@ -467,15 +466,10 @@ if not df_portfolio_raw.empty:
                 "Current_Value": curr_val,
                 "P&L (₹)": pnl
             }
-            
-            if sym.upper() == "BANKBEES":
-                recovery_rows.append(row_dict)
-            else:
-                eq_rows.append(row_dict)
+            eq_rows.append(row_dict)
 
 df_eq_active = pd.DataFrame(eq_rows)
 df_mf_active = pd.DataFrame(mf_rows)
-df_recovery_active = pd.DataFrame(recovery_rows)
 
 eq_val = df_eq_active["Current_Value"].sum() if not df_eq_active.empty else 0.0
 eq_inv = df_eq_active["Invested_Value"].sum() if not df_eq_active.empty else 0.0
@@ -485,13 +479,9 @@ mf_val = df_mf_active["Current_Value"].sum() if not df_mf_active.empty else 0.0
 mf_inv = df_mf_active["Invested_Value"].sum() if not df_mf_active.empty else 0.0
 mf_pnl = df_mf_active["P&L (₹)"].sum() if not df_mf_active.empty else 0.0
 
-rec_val = df_recovery_active["Current_Value"].sum() if not df_recovery_active.empty else 0.0
-rec_inv = df_recovery_active["Invested_Value"].sum() if not df_recovery_active.empty else 0.0
-rec_pnl = df_recovery_active["P&L (₹)"].sum() if not df_recovery_active.empty else 0.0
-
 # Overall Portfolio integrates ALL assets
-total_portfolio_val = eq_val + mf_val + rec_val
-total_portfolio_invested = eq_inv + mf_inv + rec_inv
+total_portfolio_val = eq_val + mf_val
+total_portfolio_invested = eq_inv + mf_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
@@ -503,9 +493,6 @@ current_principal, total_principal_cleared, emi_principal_cleared, prepay_princi
 r_monthly = (current_interest_rate / 100) / 12
 n_months_base = LOAN_TENURE_YEARS * 12
 full_emi = INITIAL_LOAN * r_monthly * ((1 + r_monthly)**n_months_base) / (((1 + r_monthly)**n_months_base) - 1)
-
-# --- RECOVERY SIP MATH (Background logic required for percentage calculations) ---
-total_interest_30yr = (full_emi * 360) - INITIAL_LOAN
 
 disbursed_loan_amount = INITIAL_LOAN * disbursed_ratio
 monthly_pre_emi = (disbursed_loan_amount * (current_interest_rate / 100)) / 12
@@ -759,22 +746,19 @@ with tab_dashboard:
     if is_current_month_paid:
         st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
 
-    # Principal & Interest Recovery Visualizer Card
+    # Principal Cleared Visualizer Card
     with st.container(border=True):
         pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
-        st.markdown(f"**📉 Principal Cleared & Interest Recovery Tracker**")
+        st.markdown(f"**📉 Principal Cleared Tracker** ({pct_loan_cleared * 100:.2f}% of Initial Loan Paid)")
         st.progress(min(pct_loan_cleared, 1.0))
         
-        p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+        p_col1, p_col2, p_col3 = st.columns(3)
         p_col1.metric("Total Principal Cleared", format_inr(total_principal_cleared), f"{pct_loan_cleared*100:.1f}% Cleared")
         p_col2.metric("Cleared via Regular EMIs", format_inr(emi_principal_cleared))
         p_col3.metric("Cleared via Part Payments", format_inr(prepay_principal_cleared))
-        
-        # Calculate what percentage of the total 30-year interest has been recovered by Recovery (BANKBEES) P&L
-        pct_interest_recovered = (rec_pnl / total_interest_30yr * 100) if total_interest_30yr > 0 else 0.0
-        p_col4.metric("Interest Recovered (Recovery P&L)", format_inr(rec_pnl), f"{pct_interest_recovered:.2f}% of Total Interest")
 
     st.divider()
+
 
     # --- SECTION 2: LIVE PORTFOLIO HOLDINGS & ACTION HEADER ---
     sec2_hdr_col, sec2_act_col = st.columns([3, 1])
@@ -907,7 +891,6 @@ with tab_dashboard:
     active_cards = []
     if eq_inv > 0 or eq_val > 0: active_cards.append('equity')
     if mf_inv > 0 or mf_val > 0: active_cards.append('mf')
-    if rec_inv > 0 or rec_val > 0: active_cards.append('recovery')
 
     if active_cards:
         cols = st.columns(len(active_cards))
@@ -931,16 +914,6 @@ with tab_dashboard:
                     mf_pnl_pct = (mf_pnl / mf_inv * 100) if mf_inv > 0 else 0.0
                     st.metric("Current Value", format_inr(mf_val), f"{format_inr(mf_pnl)} ({mf_pnl_pct:+.2f}%)")
                     st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(mf_inv)}</span>", unsafe_allow_html=True)
-            col_idx += 1
-
-        if 'recovery' in active_cards:
-            with cols[col_idx]:
-                with st.container(border=True):
-                    st.markdown("<h4 style='margin-bottom:0px; color:#06D6A0;'>🛡️ Interest Recovery Holdings</h4>", unsafe_allow_html=True)
-                    st.caption("BANKBEES Corpus")
-                    rec_pnl_pct = (rec_pnl / rec_inv * 100) if rec_inv > 0 else 0.0
-                    st.metric("Current Value", format_inr(rec_val), f"{format_inr(rec_pnl)} ({rec_pnl_pct:+.2f}%)")
-                    st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(rec_inv)}</span>", unsafe_allow_html=True)
             col_idx += 1
     else:
         st.info("No active holdings found in your portfolio. Import a Zerodha file to get started!")
