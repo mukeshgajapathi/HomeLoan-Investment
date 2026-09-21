@@ -742,7 +742,7 @@ with tab_dashboard:
             else:
                 st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
 
-        if st.form_submit_button("Log Monthly Payments", disabled=is_current_month_paid):
+        if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
             new_row_emi = pd.DataFrame([{
                 "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
                 "Month_Year": current_month_str, 
@@ -901,33 +901,49 @@ with tab_dashboard:
                         except Exception as e:
                             st.error(f"Failed to update Google Sheets: {e}")
 
-    # Section 2 UI: Three Clean Metric Cards
+    # Section 2 UI: Clean Metric Cards (Dynamically hidden if 0)
     st.markdown("<br>", unsafe_allow_html=True)
-    h_col1, h_col2, h_col3 = st.columns(3)
     
-    with h_col1:
-        with st.container(border=True):
-            st.markdown("<h4 style='margin-bottom:0px; color:#4CC9F0;'>📊 Equity & ETF Holdings</h4>", unsafe_allow_html=True)
-            st.caption("Standard Wealth Portfolio")
-            eq_pnl_pct = (eq_pnl / eq_inv * 100) if eq_inv > 0 else 0.0
-            st.metric("Current Value", format_inr(eq_val), f"{format_inr(eq_pnl)} ({eq_pnl_pct:+.2f}%)")
-            st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(eq_inv)}</span>", unsafe_allow_html=True)
-            
-    with h_col2:
-        with st.container(border=True):
-            st.markdown("<h4 style='margin-bottom:0px; color:#FFD166;'>💼 Mutual Fund Holdings</h4>", unsafe_allow_html=True)
-            st.caption("Standard Wealth Portfolio")
-            mf_pnl_pct = (mf_pnl / mf_inv * 100) if mf_inv > 0 else 0.0
-            st.metric("Current Value", format_inr(mf_val), f"{format_inr(mf_pnl)} ({mf_pnl_pct:+.2f}%)")
-            st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(mf_inv)}</span>", unsafe_allow_html=True)
+    active_cards = []
+    if eq_inv > 0 or eq_val > 0: active_cards.append('equity')
+    if mf_inv > 0 or mf_val > 0: active_cards.append('mf')
+    if rec_inv > 0 or rec_val > 0: active_cards.append('recovery')
 
-    with h_col3:
-        with st.container(border=True):
-            st.markdown("<h4 style='margin-bottom:0px; color:#06D6A0;'>🛡️ Interest Recovery Holdings</h4>", unsafe_allow_html=True)
-            st.caption("BANKBEES Corpus")
-            rec_pnl_pct = (rec_pnl / rec_inv * 100) if rec_inv > 0 else 0.0
-            st.metric("Current Value", format_inr(rec_val), f"{format_inr(rec_pnl)} ({rec_pnl_pct:+.2f}%)")
-            st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(rec_inv)}</span>", unsafe_allow_html=True)
+    if active_cards:
+        cols = st.columns(len(active_cards))
+        col_idx = 0
+        
+        if 'equity' in active_cards:
+            with cols[col_idx]:
+                with st.container(border=True):
+                    st.markdown("<h4 style='margin-bottom:0px; color:#4CC9F0;'>📊 Equity & ETF Holdings</h4>", unsafe_allow_html=True)
+                    st.caption("Standard Wealth Portfolio")
+                    eq_pnl_pct = (eq_pnl / eq_inv * 100) if eq_inv > 0 else 0.0
+                    st.metric("Current Value", format_inr(eq_val), f"{format_inr(eq_pnl)} ({eq_pnl_pct:+.2f}%)")
+                    st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(eq_inv)}</span>", unsafe_allow_html=True)
+            col_idx += 1
+            
+        if 'mf' in active_cards:
+            with cols[col_idx]:
+                with st.container(border=True):
+                    st.markdown("<h4 style='margin-bottom:0px; color:#FFD166;'>💼 Mutual Fund Holdings</h4>", unsafe_allow_html=True)
+                    st.caption("Standard Wealth Portfolio")
+                    mf_pnl_pct = (mf_pnl / mf_inv * 100) if mf_inv > 0 else 0.0
+                    st.metric("Current Value", format_inr(mf_val), f"{format_inr(mf_pnl)} ({mf_pnl_pct:+.2f}%)")
+                    st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(mf_inv)}</span>", unsafe_allow_html=True)
+            col_idx += 1
+
+        if 'recovery' in active_cards:
+            with cols[col_idx]:
+                with st.container(border=True):
+                    st.markdown("<h4 style='margin-bottom:0px; color:#06D6A0;'>🛡️ Interest Recovery Holdings</h4>", unsafe_allow_html=True)
+                    st.caption("BANKBEES Corpus")
+                    rec_pnl_pct = (rec_pnl / rec_inv * 100) if rec_inv > 0 else 0.0
+                    st.metric("Current Value", format_inr(rec_val), f"{format_inr(rec_pnl)} ({rec_pnl_pct:+.2f}%)")
+                    st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(rec_inv)}</span>", unsafe_allow_html=True)
+            col_idx += 1
+    else:
+        st.info("No active holdings found in your portfolio. Import a Zerodha file to get started!")
 
     st.divider()
 
