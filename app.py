@@ -527,7 +527,6 @@ with tab_aim:
 <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🌟 My Definite Chief Aim in Life</h2>
 <p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."</p>
 <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
-<div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
 <p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">"In return for the harmonious and abundant life I desire, I commit to the following principles of creative action, knowing that true wealth is built upon truth, justice, and mutual benefit."</p>
 <div style="display: flex; gap: 16px; flex-wrap: wrap;">
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #FFD166; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
@@ -540,22 +539,21 @@ with tab_aim:
 </ul>
 </div>
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #06D6A0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-<h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🥗 To Nurture Health (The Temple)</h3>
+<h3 style="color: #06D6A0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">🥗 To Nurture Health (The Physical Vessel)</h3>
 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Nourish my body with a healthy, eggetarian diet.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Ensure good, sound sleep to rejuvenate my energy.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Exercise Regularly </li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Deeply appreciate my natural health and the physical capabilities I possess.</li>
 </ul>
 </div>
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
 <h3 style="color: #4CC9F0; font-size: 17px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">💎 To Manifest Wealth (Creative Contribution)</h3>
 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Provide valuable and efficient service joyfully, giving more in use value than I receive in monetary value.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Donate generously to people in need, participating in the flow of abundance.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate financial abundance everywhere, recognizing that the supply is limitless for all.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Practice unwavering faith and purpose in my investments. By funding businesses that serve humanity, I align with the creative forces of the universe to advance life everywhere. </li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Joyfully deliver greater use value than the cash value I receive.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Share my abundance to uplift others and advance the life of all.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate wealth everywhere, knowing the universal supply is limitless.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Maintain unwavering faith and stay persistently invested.</li>
 </ul>
-</div>
 </div>
 </div>
 </div>
@@ -643,7 +641,16 @@ with tab_dashboard:
     # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
     st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-    m_col1, m_col2, m_col3 = st.columns(3)
+    # Recovery SIP Math
+    total_interest_30yr = (full_emi * 360) - INITIAL_LOAN
+    r_eq = 0.10 / 12
+    fv_factor = (((1 + r_eq)**360) - 1) / r_eq * (1 + r_eq)
+    gain_factor = fv_factor - 360
+    required_sip_post_tax = (total_interest_30yr / 0.875) / gain_factor if gain_factor > 0 else 0
+    total_sip_invested = required_sip_post_tax * 360
+    gross_final_corpus = total_sip_invested + (total_interest_30yr / 0.875)
+
+    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
     with m_col1:
         st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
         if not is_handover:
@@ -702,6 +709,20 @@ with tab_dashboard:
     with m_col3:
         st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
 
+    with m_col4:
+        st.metric("Interest Recovery SIP", format_inr(required_sip_post_tax), "Target: 10% XIRR")
+        with st.popover("💡 View Strategy Math"):
+            st.markdown("### 📈 Home Loan vs. Equity Recovery")
+            st.write(f"To completely recover the **{format_inr(total_interest_30yr)}** total interest of your {format_inr(INITIAL_LOAN)} home loan (at {current_interest_rate}% interest), you only need to run a parallel monthly Equity SIP of **{format_inr(required_sip_post_tax)}** (Post-tax) over the 30-year tenure at a 10% XIRR.")
+            st.markdown(f"""
+            **Math Breakdown (30 Years @ 10% XIRR):**
+            * **Monthly SIP:** {format_inr(required_sip_post_tax)}
+            * **Total Invested:** {format_inr(total_sip_invested)}
+            * **Gross Final Corpus:** {format_inr(gross_final_corpus)}
+            * **Estimated 12.5% LTCG Tax:** -{format_inr(gross_final_corpus - total_sip_invested - total_interest_30yr)}
+            * **Net Post-Tax Gains:** **{format_inr(total_interest_30yr)}** *(Wipes out loan interest!)*
+            """)
+
     current_month_str = datetime.now().strftime("%b %Y")
 
     if not df_loan.empty and "month_year" in [c.lower() for c in df_loan.columns]:
@@ -711,22 +732,24 @@ with tab_dashboard:
         is_current_month_paid = False
 
     with st.form("emi_form", clear_on_submit=True):
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         c1.text_input("Month-Year", value=current_month_str, disabled=True)
         
         payment_type = "Full EMI" if is_handover else "Pre-EMI"
         expected_loan = full_emi if is_handover else monthly_pre_emi
         c2.text_input("Actual Payment Made", value=format_inr(expected_loan), disabled=True)
         
-        with c3:
+        c3.text_input("Recovery SIP Made", value=format_inr(required_sip_post_tax), disabled=True)
+        
+        with c4:
             st.markdown("**Payment Status**")
             if is_current_month_paid:
                 st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 PAID</span>", unsafe_allow_html=True)
             else:
                 st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
 
-        if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
-            new_row = pd.DataFrame([{
+        if st.form_submit_button("Log Monthly Payments", disabled=is_current_month_paid):
+            new_row_emi = pd.DataFrame([{
                 "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
                 "Month_Year": current_month_str, 
                 "Expected_Payment": expected_loan, 
@@ -735,8 +758,17 @@ with tab_dashboard:
                 "Confirmed": True,
                 "Interest_Rate": current_interest_rate
             }])
-            conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-            st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
+            new_row_sip = pd.DataFrame([{
+                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                "Month_Year": current_month_str, 
+                "Expected_Payment": required_sip_post_tax, 
+                "Actual_Payment": required_sip_post_tax, 
+                "Payment_Type": "Recovery SIP", 
+                "Confirmed": True,
+                "Interest_Rate": 10.0
+            }])
+            conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row_emi, new_row_sip], ignore_index=True))
+            st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} and Recovery SIP of {format_inr(required_sip_post_tax)} successfully!")
             st.rerun()
 
     if is_current_month_paid:
