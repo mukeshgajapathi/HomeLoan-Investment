@@ -336,7 +336,7 @@ def project_ndz_target(current_principal, current_portfolio, current_rate, full_
     projected_date = sim_date + pd.DateOffset(months=months)
     return projected_date.strftime("%b %Y"), months // 12, months % 12
 
-INITIAL_LOAN = 4800000.0
+INITIAL_LOAN = 4890000.0
 LOAN_TENURE_YEARS = 30
 
 conn = st.connection("gsheets", type=GSheetsConnection)
