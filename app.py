@@ -332,8 +332,8 @@ def get_current_year_prepayment_status(df_loan):
             (df_temp["date_dt"] >= year_start_date)
         ]
         
-        has_2x_prepay_this_year = prepays_this_year_df["payment_type"].astype(str).str.contains("2x EMI", case=False, na=False).any()
-        return has_2x_prepay_this_year
+        has_prepay_this_year = prepays_this_year_df["payment_type"].astype(str).str.contains("Prepayment", case=False, na=False).any()
+        return has_prepay_this_year
 
     return False
 
@@ -626,7 +626,7 @@ with tab_dashboard:
         if not is_ndz_achieved:
             st.info(f"🔮 **Projected Net-Debt-Zero Target:** **{proj_date}** (~ {proj_yrs} Yrs {proj_mos} Mos away assuming **{xirr_label} Console XIRR**)")
         else:
-            st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You can now service EMIs directly from portfolio withdrawals!")
+            st.success("🎉 **Net-Debt-Zero Achieved:** Your investment portfolio corpus meets or exceeds your total remaining loan principal. You have reached complete financial freedom!")
 
         st.divider()
 
@@ -919,12 +919,21 @@ with tab_dashboard:
 
     has_annual_prepay_executed = get_current_year_prepayment_status(df_loan)
     prepay_amount_2x = 2 * full_emi
+    corpus_4_pct = 0.04 * total_portfolio_val
 
-    st.markdown("### 🚦 Annual 2x EMI Prepayment Rule")
+    # UI Information Headers
+    with st.container(border=True):
+        c_l1, c_l2 = st.columns(2)
+        with c_l1:
+            st.info("🎯 **Primary Objective:** Direct all surplus monthly savings into building your investment portfolio corpus until Net-Debt-Zero is achieved.")
+        with c_l2:
+            st.success("🔓 **Unlocks Upon Net-Debt-Zero:**\n**4% Annual Prepayment:** Swap from the 2x EMI strategy to massive 4% corpus prepayments to rapidly annihilate the final debt balance.")
+
+    st.markdown("### 🚦 Annual Prepayment Rule Status")
     st.caption("ℹ️ **Strategy:** Skim profits during bull markets to crush loan principal. Limited to **1 time per loan year**.")
     
     rule_col1, rule_col2, rule_col3 = st.columns(3)
-    rule_col1.metric("2x EMI Prepayment Target", format_inr(prepay_amount_2x))
+    rule_col1.metric("Current 2x EMI Target", format_inr(prepay_amount_2x))
     
     is_xirr_valid = (console_xirr is not None) and (console_xirr > 10.0)
     
@@ -952,7 +961,7 @@ with tab_dashboard:
         "Select Action Strategy:",
         options=[
             "Execute Annual 2x EMI Prepayment (Requires XIRR > 10%)",
-            "Service Monthly EMI from Portfolio Corpus (Requires Net-Debt-Zero)"
+            "Execute 4% Portfolio Corpus Prepayment (Requires Net-Debt-Zero)"
         ],
         horizontal=True
     )
@@ -966,7 +975,7 @@ with tab_dashboard:
             if not is_xirr_valid:
                 st.warning("🔒 Console XIRR must be strictly > 10.0% to unlock the annual 2x EMI prepayment.")
             elif has_annual_prepay_executed:
-                st.warning("🔒 The Annual 2x EMI Prepayment has already been executed for this loan year.")
+                st.warning("🔒 An annual prepayment has already been executed for this loan year.")
             else:
                 st.info("🔓 **Strategy Unlocked!** You may execute your annual 2x EMI prepayment.")
 
@@ -984,30 +993,32 @@ with tab_dashboard:
         months_saved = max(0, round(current_rem_months - new_rem_months))
         st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
 
-    else: # Service Monthly EMI from Corpus
-        enable_pp = is_ndz_achieved
+    else: # Execute 4% Portfolio Corpus Prepayment
+        enable_pp = is_ndz_achieved and (not has_annual_prepay_executed)
         with pp_input_col1:
             if not is_ndz_achieved:
                 st.warning(
-                    f"🔒 **Net-Debt-Zero Pending:** You cannot service EMIs directly from your corpus until your portfolio value ({format_inr(total_portfolio_val)}) exceeds your remaining loan principal ({format_inr(current_principal)})."
+                    f"🔒 **Net-Debt-Zero Pending:** You cannot execute the 4% corpus prepayment until your portfolio value ({format_inr(total_portfolio_val)}) exceeds your remaining loan principal ({format_inr(current_principal)})."
                 )
+            elif has_annual_prepay_executed:
+                st.warning("🔒 An annual prepayment has already been executed for this loan year.")
             else:
-                st.info(f"🔓 **Net-Debt-Zero Achieved!** Monthly EMI of **{format_inr(full_emi)}** will be withdrawn from portfolio corpus.")
+                st.info(f"🔓 **Net-Debt-Zero Achieved!** You may execute a massive 4% corpus prepayment.")
             
         with pp_input_col2:
             pp_amount = st.number_input(
-                "EMI Amount (₹)", 
-                value=float(full_emi), 
-                disabled=True
+                "Prepayment Amount (₹)", 
+                value=float(corpus_4_pct), 
+                step=5000.0,
+                disabled=not enable_pp
             )
-        logged_payment_type = "Full EMI (Corpus Withdrawal)"
+        logged_payment_type = "Prepayment (4% Corpus)"
         
-        # Action Preview Calculation for Regular EMI
-        interest_portion = current_principal * r_monthly
-        principal_reduction = max(0.0, full_emi - interest_portion)
+        # Action Preview Calculation
+        principal_reduction = pp_amount if enable_pp else 0.0
         new_rem_months = calc_rem_months(current_principal - principal_reduction, full_emi, r_monthly)
         months_saved = max(0, round(current_rem_months - new_rem_months))
-        st.metric("Tenure Progressed By", f"{months_saved} Month", "Standard 1-Month Amortization Cycle")
+        st.metric("Tenure Reduced By", f"{months_saved} Months", f"~ {months_saved/12:.1f} Years saved")
 
     if st.button("Execute Strategy Action & Log to Sheet", disabled=not enable_pp, type="primary"):
         new_row = pd.DataFrame([{
