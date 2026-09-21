@@ -521,7 +521,7 @@ with tab_aim:
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Provide more efficient and valuable service joyfully, delivering greater use value than the cash value I receive.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Donate to people in need, contributing to the flow of abundance.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate wealth everywhere, knowing the universal supply is limitless.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Maintain unwavering faith and stay persistently invested. We invest to create, not to compete. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.<li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Maintain unwavering faith and stay persistently invested. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.<li>
 </ul>
 </div>
 </div>
