@@ -336,7 +336,7 @@ def project_ndz_target(current_principal, current_portfolio, current_rate, full_
     projected_date = sim_date + pd.DateOffset(months=months)
     return projected_date.strftime("%b %Y"), months // 12, months % 12
 
-INITIAL_LOAN = 4800000.0
+INITIAL_LOAN = 4890000.0
 LOAN_TENURE_YEARS = 30
 
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -883,10 +883,24 @@ with tab_dashboard:
     st.divider()
 
     # --- SECTION 3: INTUITIVE PART PAYMENTS ---
-    st.subheader("3. Intuitive Part Payments")
+    st.subheader("3. 🌱 The Abundance Approach to Financial Freedom")
     
     with st.container(border=True):
-        st.info("🌱 **The Abundance Approach:** No rigid rules. No forced withdrawals. When your intuition signals, or when surplus cash flows into your life, use this portal to instantly channel that energy into destroying your loan principal.")
+        st.markdown("""
+        **The Illusion of Micromanagement**
+        Traditional financial models try to rigidly predict the future through endless calculations. However, true wealth creation does not come from worrying about market volatility, macroeconomic shifts, or the exact timing of your next salary hike. When you hold a Definite Chief Aim for total financial abundance, the creative forces of the universe orchestrate the details on your behalf. Your job is not to anxiously force the "how," but to remain perfectly aligned with your vision.
+        
+        **Acting in the Joyous Present**
+        Trying to micromanage every variable creates unnecessary friction and resistance. Let go of the need to predict the exact month your home is fully paid off. Hold your vision with unwavering faith and purpose, but act efficiently and joyfully in the Now. Your true goal is to feel good, maintain a high vibration, and enjoy each and every moment with your family.
+        
+        **The Creative Flow of Capital**
+        We stay invested in the market not out of a competitive scramble for returns, but as a deliberate act of creation. Deploying capital into equity is a way to actively fund businesses that serve humanity. By participating in this flow, you are advancing life for all, ensuring that your wealth brings more use value to the world.
+        
+        **Inspired, Grateful Action**
+        There are no rigid rules, forced multiples, or anxious timelines here. Whenever the universe delivers surplus cash, or whenever your emotional guidance system inspires you to reduce your principal from a place of profound gratitude, simply enter that amount below.
+        """)
+        
+        st.divider()
         
         pp_input_col1, pp_input_col2 = st.columns(2)
         
@@ -894,7 +908,7 @@ with tab_dashboard:
             st.markdown("### 💸 Execute Part Payment")
             pp_amount = st.number_input("Prepayment Amount (₹)", value=100000.0, step=10000.0, min_value=1.0)
             
-            if st.button("Log Part Payment to Sheet", type="primary"):
+            if st.button("Log Joyful Part Payment", type="primary"):
                 new_row = pd.DataFrame([{
                     "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
                     "Month_Year": datetime.now().strftime("%b %Y"), 
@@ -905,7 +919,7 @@ with tab_dashboard:
                     "Interest_Rate": current_interest_rate
                 }])
                 conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-                st.success(f"Executed Part Payment of {format_inr(pp_amount)} successfully!")
+                st.success(f"Executed Joyful Part Payment of {format_inr(pp_amount)} successfully!")
                 st.cache_data.clear()
                 st.rerun()
                 
