@@ -610,9 +610,11 @@ with tab_dashboard:
     # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
     st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-    m_col1, m_col2, m_col3 = st.columns(3)
+m_col1, m_col2, m_col3 = st.columns(3)
+    
     with m_col1:
-        st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
+        st.markdown(f"**{active_due_label}**<br>{format_inr(active_due_amount)}<br><span style='color:#00CC96; font-size:13.5px;'>{disbursement_badge}</span>", unsafe_allow_html=True)
+        st.write("") # Adds a tiny space before the popover button
         if not is_handover:
             with st.popover("✏️ Edit Disbursement Stage"):
                 st.markdown("### 🏗️ Update Loan Disbursement")
@@ -646,7 +648,8 @@ with tab_dashboard:
                     st.rerun()
 
     with m_col2:
-        st.metric("Interest Rate", f"{current_interest_rate}%", "Floating Rate")
+        st.markdown(f"**Interest Rate**<br>{current_interest_rate}%<br><span style='color:#808495; font-size:13.5px;'>Floating Rate</span>", unsafe_allow_html=True)
+        st.write("")
         with st.popover("✏️ Update Interest Rate"):
             st.markdown("### 🏦 Update Interest Rate")
             new_rate = st.number_input(
@@ -667,7 +670,7 @@ with tab_dashboard:
                 st.rerun()
 
     with m_col3:
-        st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
+        st.markdown(f"**Current Tenure Remaining**<br>{rem_years:.1f} Yrs<br><span style='color:#808495; font-size:13.5px;'>{int(current_rem_months)} Mos left</span>", unsafe_allow_html=True)
 
     current_month_str = datetime.now().strftime("%b %Y")
 
