@@ -489,6 +489,16 @@ r_monthly = (current_interest_rate / 100) / 12
 n_months_base = LOAN_TENURE_YEARS * 12
 full_emi = INITIAL_LOAN * r_monthly * ((1 + r_monthly)**n_months_base) / (((1 + r_monthly)**n_months_base) - 1)
 
+# --- RECOVERY SIP MATH ---
+total_interest_30yr = (full_emi * 360) - INITIAL_LOAN
+r_eq = 0.10 / 12
+fv_factor = (((1 + r_eq)**360) - 1) / r_eq * (1 + r_eq)
+gain_factor = fv_factor - 360
+required_sip_post_tax = (total_interest_30yr / 0.875) / gain_factor if gain_factor > 0 else 0
+total_sip_invested = required_sip_post_tax * 360
+gross_final_corpus = total_sip_invested + (total_interest_30yr / 0.875)
+# -------------------------
+
 disbursed_loan_amount = INITIAL_LOAN * disbursed_ratio
 monthly_pre_emi = (disbursed_loan_amount * (current_interest_rate / 100)) / 12
 
@@ -770,22 +780,26 @@ with tab_dashboard:
             conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row_emi, new_row_sip], ignore_index=True))
             st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} and Recovery SIP of {format_inr(required_sip_post_tax)} successfully!")
             st.rerun()
-
-    if is_current_month_paid:
+        if is_current_month_paid:
         st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
 
-    # Principal Cleared Visualizer Card
+    # Principal & Interest Recovery Visualizer Card
     with st.container(border=True):
         pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
-        st.markdown(f"**📉 Principal Cleared Tracker** ({pct_loan_cleared * 100:.2f}% of Initial Loan Paid)")
+        st.markdown(f"**📉 Principal Cleared & Interest Recovery Tracker**")
         st.progress(min(pct_loan_cleared, 1.0))
         
-        p_col1, p_col2, p_col3 = st.columns(3)
+        p_col1, p_col2, p_col3, p_col4 = st.columns(4)
         p_col1.metric("Total Principal Cleared", format_inr(total_principal_cleared), f"{pct_loan_cleared*100:.1f}% Cleared")
         p_col2.metric("Cleared via Regular EMIs", format_inr(emi_principal_cleared))
         p_col3.metric("Cleared via Part Payments", format_inr(prepay_principal_cleared))
+        
+        # Calculate what percentage of the total 30-year interest has been recovered by Equity/MF P&L
+        pct_interest_recovered = (overall_pnl / total_interest_30yr * 100) if total_interest_30yr > 0 else 0.0
+        p_col4.metric("Interest Recovered (Equity P&L)", format_inr(overall_pnl), f"{pct_interest_recovered:.2f}% of Total Interest")
 
     st.divider()
+
 
     # --- SECTION 2: LIVE PORTFOLIO HOLDINGS & ACTION HEADER ---
     sec2_hdr_col, sec2_act_col = st.columns([3, 1])
