@@ -882,23 +882,21 @@ with tab_dashboard:
 
     st.divider()
 
-    # --- SECTION 3: INTUITIVE PART PAYMENTS ---
+# --- SECTION 3: INTUITIVE PART PAYMENTS ---
     st.subheader("3. 🌱 The Abundance Approach to Financial Freedom")
     
     with st.container(border=True):
-        st.markdown("""
-        **The Illusion of Micromanagement**
-        Traditional financial models try to rigidly predict the future through endless calculations. However, true wealth creation does not come from worrying about market volatility, macroeconomic shifts, or the exact timing of your next salary hike. When you hold a Definite Chief Aim for total financial abundance, the creative forces of the universe orchestrate the details on your behalf. Your job is not to anxiously force the "how," but to remain perfectly aligned with your vision.
         
-        **Acting in the Joyous Present**
-        Trying to micromanage every variable creates unnecessary friction and resistance. Let go of the need to predict the exact month your home is fully paid off. Hold your vision with unwavering faith and purpose, but act efficiently and joyfully in the Now. Your true goal is to feel good, maintain a high vibration, and enjoy each and every moment with your family.
+        # Enhanced UI: 2-Column layout for crisp, balanced readability
+        ab_col1, ab_col2 = st.columns(2)
         
-        **The Creative Flow of Capital**
-        We stay invested in the market not out of a competitive scramble for returns, but as a deliberate act of creation. Deploying capital into equity is a way to actively fund businesses that serve humanity. By participating in this flow, you are advancing life for all, ensuring that your wealth brings more use value to the world.
-        
-        **Inspired, Grateful Action**
-        There are no rigid rules, forced multiples, or anxious timelines here. Whenever the universe delivers surplus cash, or whenever your emotional guidance system inspires you to reduce your principal from a place of profound gratitude, simply enter that amount below.
-        """)
+        with ab_col1:
+            st.markdown("🌌 **Release Micromanagement:** Stop trying to force the 'how.' Let the universe handle market volatility and macroeconomics while you stay perfectly aligned with your Definite Chief Aim.")
+            st.markdown("🌊 **Direct the Creative Flow:** We invest to create, not to compete. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.")
+            
+        with ab_col2:
+            st.markdown("⏳ **Act in the Joyous Present:** Surrender anxious timelines and the need to predict the exact month you become debt-free. Act efficiently in the Now to enjoy every moment with your family.")
+            st.markdown("💖 **Take Inspired Action:** There are no rigid rules or forced multiples here. Whenever the universe delivers surplus cash, or your intuition guides you from a place of profound gratitude, log your contribution below.")
         
         st.divider()
         
