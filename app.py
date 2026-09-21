@@ -420,6 +420,7 @@ df_portfolio_raw, df_loan, disbursed_ratio, is_handover_completed, current_inter
 # Process Holdings Data
 eq_rows = []
 mf_rows = []
+recovery_rows = []
 
 if not df_portfolio_raw.empty:
     for _, row in df_portfolio_raw.iterrows():
@@ -455,7 +456,7 @@ if not df_portfolio_raw.empty:
             curr_val = units * ltp
             pnl = curr_val - (units * avg_cost)
             
-            eq_rows.append({
+            row_dict = {
                 "Symbol": sym,
                 "Account": acc,
                 "ISIN": isin_val,
@@ -465,18 +466,32 @@ if not df_portfolio_raw.empty:
                 "Invested_Value": units * avg_cost,
                 "Current_Value": curr_val,
                 "P&L (₹)": pnl
-            })
+            }
+            
+            if sym.upper() == "BANKBEES":
+                recovery_rows.append(row_dict)
+            else:
+                eq_rows.append(row_dict)
 
 df_eq_active = pd.DataFrame(eq_rows)
 df_mf_active = pd.DataFrame(mf_rows)
+df_recovery_active = pd.DataFrame(recovery_rows)
 
 eq_val = df_eq_active["Current_Value"].sum() if not df_eq_active.empty else 0.0
 eq_inv = df_eq_active["Invested_Value"].sum() if not df_eq_active.empty else 0.0
+eq_pnl = df_eq_active["P&L (₹)"].sum() if not df_eq_active.empty else 0.0
+
 mf_val = df_mf_active["Current_Value"].sum() if not df_mf_active.empty else 0.0
 mf_inv = df_mf_active["Invested_Value"].sum() if not df_mf_active.empty else 0.0
+mf_pnl = df_mf_active["P&L (₹)"].sum() if not df_mf_active.empty else 0.0
 
-total_portfolio_val = eq_val + mf_val
-total_portfolio_invested = eq_inv + mf_inv
+rec_val = df_recovery_active["Current_Value"].sum() if not df_recovery_active.empty else 0.0
+rec_inv = df_recovery_active["Invested_Value"].sum() if not df_recovery_active.empty else 0.0
+rec_pnl = df_recovery_active["P&L (₹)"].sum() if not df_recovery_active.empty else 0.0
+
+# Overall Portfolio integrates ALL assets
+total_portfolio_val = eq_val + mf_val + rec_val
+total_portfolio_invested = eq_inv + mf_inv + rec_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
@@ -786,9 +801,9 @@ with tab_dashboard:
         p_col2.metric("Cleared via Regular EMIs", format_inr(emi_principal_cleared))
         p_col3.metric("Cleared via Part Payments", format_inr(prepay_principal_cleared))
         
-        # Calculate what percentage of the total 30-year interest has been recovered by Equity/MF P&L
-        pct_interest_recovered = (overall_pnl / total_interest_30yr * 100) if total_interest_30yr > 0 else 0.0
-        p_col4.metric("Interest Recovered (Equity P&L)", format_inr(overall_pnl), f"{pct_interest_recovered:.2f}% of Total Interest")
+        # Calculate what percentage of the total 30-year interest has been recovered by Recovery (BANKBEES) P&L
+        pct_interest_recovered = (rec_pnl / total_interest_30yr * 100) if total_interest_30yr > 0 else 0.0
+        p_col4.metric("Interest Recovered (Recovery P&L)", format_inr(rec_pnl), f"{pct_interest_recovered:.2f}% of Total Interest")
 
     st.divider()
 
@@ -917,55 +932,33 @@ with tab_dashboard:
                         except Exception as e:
                             st.error(f"Failed to update Google Sheets: {e}")
 
-    # Section 2A: Equity & ETF Holdings
-    with st.expander("📊 Equity & ETF Holdings", expanded=False):
-        if df_eq_active.empty:
-            st.info("No active Equity/ETF holdings found in 'Portfolio_Tracker' tab.")
-        else:
-            for _, row in df_eq_active.iterrows():
-                sym = row["Symbol"]
-                acc = row["Account"]
-                units = row["Units_Accumulated"]
-                ltp = row["Current_LTP"]
-                inv = row["Invested_Value"]
-                curr = row["Current_Value"]
-                pnl = row["P&L (₹)"]
-                pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-                
-                with st.container(border=True):
-                    st.markdown(
-                        f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ {format_inr(ltp)} (Avg: {format_inr(row['Avg_Cost'])})</span>", 
-                        unsafe_allow_html=True
-                    )
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Invested", format_inr(inv))
-                    m2.metric("Current Value", format_inr(curr))
-                    m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+    # Section 2 UI: Three Clean Metric Cards
+    st.markdown("<br>", unsafe_allow_html=True)
+    h_col1, h_col2, h_col3 = st.columns(3)
+    
+    with h_col1:
+        with st.container(border=True):
+            st.markdown("<h4 style='margin-bottom:0px; color:#4CC9F0;'>📊 Equity & ETF Holdings</h4>", unsafe_allow_html=True)
+            st.caption("Standard Wealth Portfolio")
+            eq_pnl_pct = (eq_pnl / eq_inv * 100) if eq_inv > 0 else 0.0
+            st.metric("Current Value", format_inr(eq_val), f"{format_inr(eq_pnl)} ({eq_pnl_pct:+.2f}%)")
+            st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(eq_inv)}</span>", unsafe_allow_html=True)
+            
+    with h_col2:
+        with st.container(border=True):
+            st.markdown("<h4 style='margin-bottom:0px; color:#FFD166;'>💼 Mutual Fund Holdings</h4>", unsafe_allow_html=True)
+            st.caption("Standard Wealth Portfolio")
+            mf_pnl_pct = (mf_pnl / mf_inv * 100) if mf_inv > 0 else 0.0
+            st.metric("Current Value", format_inr(mf_val), f"{format_inr(mf_pnl)} ({mf_pnl_pct:+.2f}%)")
+            st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(mf_inv)}</span>", unsafe_allow_html=True)
 
-    # Section 2B: Mutual Fund Holdings
-    with st.expander("💼 Mutual Fund Holdings", expanded=False):
-        if df_mf_active.empty:
-            st.info("No active Mutual Fund holdings found in 'Portfolio_Tracker' tab.")
-        else:
-            for _, row in df_mf_active.iterrows():
-                sym = row["Symbol"]
-                acc = row["Account"]
-                units = row["Units_Accumulated"]
-                ltp = row["Current_LTP"]
-                inv = row["Invested_Value"]
-                curr = row["Current_Value"]
-                pnl = row["P&L (₹)"]
-                pnl_pct = (pnl / inv * 100) if inv > 0 else 0.0
-                
-                with st.container(border=True):
-                    st.markdown(
-                        f"**{sym}** &nbsp; <span style='color:#00D1B2; font-size:11px; background-color:#1E1E1E; padding:2px 8px; border-radius:4px; font-weight:600;'>{acc}</span> &nbsp; <span style='color:#808495; font-size:13px;'>{units:.4f} Units @ ₹{ltp:.2f} NAV (Avg: {format_inr(row['Avg_Cost'])})</span>", 
-                        unsafe_allow_html=True
-                    )
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Invested", format_inr(inv))
-                    m2.metric("Current Value", format_inr(curr))
-                    m3.metric("Net P&L", format_inr(pnl), f"{pnl_pct:+.2f}%")
+    with h_col3:
+        with st.container(border=True):
+            st.markdown("<h4 style='margin-bottom:0px; color:#06D6A0;'>🛡️ Interest Recovery Holdings</h4>", unsafe_allow_html=True)
+            st.caption("BANKBEES Corpus")
+            rec_pnl_pct = (rec_pnl / rec_inv * 100) if rec_inv > 0 else 0.0
+            st.metric("Current Value", format_inr(rec_val), f"{format_inr(rec_pnl)} ({rec_pnl_pct:+.2f}%)")
+            st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(rec_inv)}</span>", unsafe_allow_html=True)
 
     st.divider()
 
