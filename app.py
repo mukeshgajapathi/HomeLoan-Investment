@@ -512,7 +512,7 @@ with tab_aim:
 <ul style="list-style-type: none; padding-left: 0; margin: 0;">
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Nourish my body with a healthy, eggetarian diet.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Ensure good, sound sleep to rejuvenate my energy.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Deeply appreciate my natural health and the physical capabilities I possess.</li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #06D6A0;">✦</span> Exercise regularly</li>
 </ul>
 </div>
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #4CC9F0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
