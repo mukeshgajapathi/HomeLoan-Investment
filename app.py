@@ -599,19 +599,19 @@ with tab_aim:
 """, unsafe_allow_html=True)
 
     # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB (ALIGNED GOAL STATE) ---
-with st.container(border=True):
-        pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
-        st.markdown(f"**📉 Principal Cleared & Interest Recovery Tracker**")
-        st.progress(min(pct_loan_cleared, 1.0))
+    with st.container(border=True):
+        st.markdown("<h3 style='margin-bottom: 0px;'>🎯 Net-Debt-Zero Visualizer</h3>", unsafe_allow_html=True)
         
-        p_col1, p_col2, p_col3, p_col4 = st.columns(4)
-        p_col1.metric("Total Principal Cleared", format_inr(total_principal_cleared), f"{pct_loan_cleared*100:.1f}% Cleared")
-        p_col2.metric("Cleared via Regular EMIs", format_inr(emi_principal_cleared))
-        p_col3.metric("Cleared via Part Payments", format_inr(prepay_principal_cleared))
+        st.progress(1.0)
+        st.caption("✨ **100.0% Covered** towards Net-Debt-Zero target | **Goal Fully Manifested**")
         
-        # Calculate what percentage of the total 30-year interest has been recovered by Equity/MF P&L
-        pct_interest_recovered = (overall_pnl / total_interest_30yr * 100) if total_interest_30yr > 0 else 0.0
-        p_col4.metric("Interest Recovered (Equity P&L)", format_inr(overall_pnl), f"{pct_interest_recovered:.2f}% of Total Interest")
+        st.success("🎉 **Net-Debt-Zero Fully Achieved:** Living in total financial freedom, peace of mind, and complete abundance!")
+        
+        st.divider()
+        
+        s_col1, s_col2 = st.columns(2)
+        s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
+        s_col2.metric("Portfolio Value", "₹1,00,00,000", "1 Cr - Total Financial Abundance")
 
 with tab_dashboard:
     # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB (CURRENT REALITY) ---
@@ -650,15 +650,6 @@ with tab_dashboard:
 
     # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
     st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
-
-    # Recovery SIP Math
-    total_interest_30yr = (full_emi * 360) - INITIAL_LOAN
-    r_eq = 0.10 / 12
-    fv_factor = (((1 + r_eq)**360) - 1) / r_eq * (1 + r_eq)
-    gain_factor = fv_factor - 360
-    required_sip_post_tax = (total_interest_30yr / 0.875) / gain_factor if gain_factor > 0 else 0
-    total_sip_invested = required_sip_post_tax * 360
-    gross_final_corpus = total_sip_invested + (total_interest_30yr / 0.875)
 
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
     with m_col1:
@@ -780,7 +771,8 @@ with tab_dashboard:
             conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row_emi, new_row_sip], ignore_index=True))
             st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} and Recovery SIP of {format_inr(required_sip_post_tax)} successfully!")
             st.rerun()
-        if is_current_month_paid:
+
+    if is_current_month_paid:
         st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
 
     # Principal & Interest Recovery Visualizer Card
@@ -799,7 +791,6 @@ with tab_dashboard:
         p_col4.metric("Interest Recovered (Equity P&L)", format_inr(overall_pnl), f"{pct_interest_recovered:.2f}% of Total Interest")
 
     st.divider()
-
 
     # --- SECTION 2: LIVE PORTFOLIO HOLDINGS & ACTION HEADER ---
     sec2_hdr_col, sec2_act_col = st.columns([3, 1])
