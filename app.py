@@ -504,15 +504,8 @@ r_monthly = (current_interest_rate / 100) / 12
 n_months_base = LOAN_TENURE_YEARS * 12
 full_emi = INITIAL_LOAN * r_monthly * ((1 + r_monthly)**n_months_base) / (((1 + r_monthly)**n_months_base) - 1)
 
-# --- RECOVERY SIP MATH ---
+# --- RECOVERY SIP MATH (Background logic required for percentage calculations) ---
 total_interest_30yr = (full_emi * 360) - INITIAL_LOAN
-r_eq = 0.10 / 12
-fv_factor = (((1 + r_eq)**360) - 1) / r_eq * (1 + r_eq)
-gain_factor = fv_factor - 360
-required_sip_post_tax = (total_interest_30yr / 0.875) / gain_factor if gain_factor > 0 else 0
-total_sip_invested = required_sip_post_tax * 360
-gross_final_corpus = total_sip_invested + (total_interest_30yr / 0.875)
-# -------------------------
 
 disbursed_loan_amount = INITIAL_LOAN * disbursed_ratio
 monthly_pre_emi = (disbursed_loan_amount * (current_interest_rate / 100)) / 12
@@ -552,6 +545,7 @@ with tab_aim:
 <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🌟 My Definite Chief Aim in Life</h2>
 <p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."</p>
 <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
+<div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
 <p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">"In return for the harmonious and abundant life I desire, I commit to the following principles of creative action, knowing that true wealth is built upon truth, justice, and mutual benefit."</p>
 <div style="display: flex; gap: 16px; flex-wrap: wrap;">
 <div style="flex: 1; min-width: 260px; background: rgba(255, 255, 255, 0.04); padding: 20px; border-radius: 14px; border-left: 4px solid #FFD166; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
@@ -666,7 +660,7 @@ with tab_dashboard:
     # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
     st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
-    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+    m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
         st.metric(active_due_label, format_inr(active_due_amount), disbursement_badge)
         if not is_handover:
@@ -725,20 +719,6 @@ with tab_dashboard:
     with m_col3:
         st.metric("Current Tenure Remaining", f"{rem_years:.1f} Yrs", f"{int(current_rem_months)} Mos left")
 
-    with m_col4:
-        st.metric("Interest Recovery SIP", format_inr(required_sip_post_tax), "Target: 10% XIRR")
-        with st.popover("💡 View Strategy Math"):
-            st.markdown("### 📈 Home Loan vs. Equity Recovery")
-            st.write(f"To completely recover the **{format_inr(total_interest_30yr)}** total interest of your {format_inr(INITIAL_LOAN)} home loan (at {current_interest_rate}% interest), you only need to run a parallel monthly Equity SIP of **{format_inr(required_sip_post_tax)}** (Post-tax) over the 30-year tenure at a 10% XIRR.")
-            st.markdown(f"""
-            **Math Breakdown (30 Years @ 10% XIRR):**
-            * **Monthly SIP:** {format_inr(required_sip_post_tax)}
-            * **Total Invested:** {format_inr(total_sip_invested)}
-            * **Gross Final Corpus:** {format_inr(gross_final_corpus)}
-            * **Estimated 12.5% LTCG Tax:** -{format_inr(gross_final_corpus - total_sip_invested - total_interest_30yr)}
-            * **Net Post-Tax Gains:** **{format_inr(total_interest_30yr)}** *(Wipes out loan interest!)*
-            """)
-
     current_month_str = datetime.now().strftime("%b %Y")
 
     if not df_loan.empty and "month_year" in [c.lower() for c in df_loan.columns]:
@@ -748,16 +728,14 @@ with tab_dashboard:
         is_current_month_paid = False
 
     with st.form("emi_form", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         c1.text_input("Month-Year", value=current_month_str, disabled=True)
         
         payment_type = "Full EMI" if is_handover else "Pre-EMI"
         expected_loan = full_emi if is_handover else monthly_pre_emi
         c2.text_input("Actual Payment Made", value=format_inr(expected_loan), disabled=True)
         
-        c3.text_input("Recovery SIP Made", value=format_inr(required_sip_post_tax), disabled=True)
-        
-        with c4:
+        with c3:
             st.markdown("**Payment Status**")
             if is_current_month_paid:
                 st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 PAID</span>", unsafe_allow_html=True)
@@ -774,17 +752,8 @@ with tab_dashboard:
                 "Confirmed": True,
                 "Interest_Rate": current_interest_rate
             }])
-            new_row_sip = pd.DataFrame([{
-                "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-                "Month_Year": current_month_str, 
-                "Expected_Payment": required_sip_post_tax, 
-                "Actual_Payment": required_sip_post_tax, 
-                "Payment_Type": "Recovery SIP", 
-                "Confirmed": True,
-                "Interest_Rate": 10.0
-            }])
-            conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row_emi, new_row_sip], ignore_index=True))
-            st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} and Recovery SIP of {format_inr(required_sip_post_tax)} successfully!")
+            conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row_emi], ignore_index=True))
+            st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
             st.rerun()
 
     if is_current_month_paid:
