@@ -613,61 +613,66 @@ with tab_dashboard:
     m_col1, m_col2, m_col3 = st.columns(3)
     
     with m_col1:
-        st.markdown(f"**{active_due_label}**<br>{format_inr(active_due_amount)}<br><span style='color:#00CC96; font-size:13.5px;'>{disbursement_badge}</span>", unsafe_allow_html=True)
-        st.write("") # Adds a tiny space before the popover button
+        c1_text, c1_btn = st.columns([5, 1])
+        with c1_text:
+            st.markdown(f"**{active_due_label}**<br>{format_inr(active_due_amount)}<br><span style='color:#00CC96; font-size:13.5px;'>{disbursement_badge}</span>", unsafe_allow_html=True)
+        
         if not is_handover:
-            with st.popover("✏️ Edit Disbursement Stage"):
-                st.markdown("### 🏗️ Update Loan Disbursement")
-                selected_stage = st.radio(
-                    "Select Disbursed Milestone:",
-                    [
-                        "90% - Initial Disbursed Base",
-                        "95% - Plastering Completed (~Jan 2027)",
-                        "100% - Handover Completed (Full EMI Starts)"
-                    ],
-                    index=0 if disbursed_ratio == 0.90 else (1 if disbursed_ratio == 0.95 else 2)
+            with c1_btn:
+                with st.popover("✏️", help="Edit Disbursement Stage"):
+                    st.markdown("### 🏗️ Update Loan Disbursement")
+                    selected_stage = st.radio(
+                        "Select Disbursed Milestone:",
+                        [
+                            "90% - Initial Disbursed Base",
+                            "95% - Plastering Completed (~Jan 2027)",
+                            "100% - Handover Completed (Full EMI Starts)"
+                        ],
+                        index=0 if disbursed_ratio == 0.90 else (1 if disbursed_ratio == 0.95 else 2)
+                    )
+                    
+                    new_ratio = 0.90 if "90%" in selected_stage else (0.95 if "95%" in selected_stage else 1.0)
+                    confirm_handover = False
+                    if new_ratio == 1.0:
+                        st.warning(f"⚠️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** ({format_inr(full_emi)}) and this edit option will be **permanently locked**.")
+                        confirm_handover = st.checkbox("I confirm handover is completed and agree to lock settings.")
+                    
+                    can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
+                    
+                    if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary"):
+                        updated_settings = pd.DataFrame([{
+                            "Disbursed_Ratio": new_ratio,
+                            "Handover_Completed": (new_ratio == 1.0),
+                            "Interest_Rate": current_interest_rate,
+                            "Console_XIRR": console_xirr if console_xirr is not None else 0.0
+                        }])
+                        conn.update(worksheet="Loan_Settings", data=updated_settings)
+                        st.success("Loan settings updated successfully!")
+                        st.rerun()
+
+    with m_col2:
+        c2_text, c2_btn = st.columns([5, 1])
+        with c2_text:
+            st.markdown(f"**Interest Rate**<br>{current_interest_rate}%<br><span style='color:#808495; font-size:13.5px;'>Floating Rate</span>", unsafe_allow_html=True)
+        with c2_btn:
+            with st.popover("✏️", help="Update Interest Rate"):
+                st.markdown("### 🏦 Update Interest Rate")
+                new_rate = st.number_input(
+                    "New Annual Interest Rate (%)", 
+                    value=float(current_interest_rate), 
+                    step=0.05, 
+                    format="%.2f"
                 )
-                
-                new_ratio = 0.90 if "90%" in selected_stage else (0.95 if "95%" in selected_stage else 1.0)
-                confirm_handover = False
-                if new_ratio == 1.0:
-                    st.warning(f"⚠️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** ({format_inr(full_emi)}) and this edit option will be **permanently locked**.")
-                    confirm_handover = st.checkbox("I confirm handover is completed and agree to lock settings.")
-                
-                can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
-                
-                if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary"):
+                if st.button("💾 Save New Rate", type="primary"):
                     updated_settings = pd.DataFrame([{
-                        "Disbursed_Ratio": new_ratio,
-                        "Handover_Completed": (new_ratio == 1.0),
-                        "Interest_Rate": current_interest_rate,
+                        "Disbursed_Ratio": disbursed_ratio,
+                        "Handover_Completed": is_handover_completed,
+                        "Interest_Rate": new_rate,
                         "Console_XIRR": console_xirr if console_xirr is not None else 0.0
                     }])
                     conn.update(worksheet="Loan_Settings", data=updated_settings)
-                    st.success("Loan settings updated successfully!")
+                    st.success(f"Interest rate dynamically updated to {new_rate}%!")
                     st.rerun()
-
-    with m_col2:
-        st.markdown(f"**Interest Rate**<br>{current_interest_rate}%<br><span style='color:#808495; font-size:13.5px;'>Floating Rate</span>", unsafe_allow_html=True)
-        st.write("")
-        with st.popover("✏️ Update Interest Rate"):
-            st.markdown("### 🏦 Update Interest Rate")
-            new_rate = st.number_input(
-                "New Annual Interest Rate (%)", 
-                value=float(current_interest_rate), 
-                step=0.05, 
-                format="%.2f"
-            )
-            if st.button("💾 Save New Rate", type="primary"):
-                updated_settings = pd.DataFrame([{
-                    "Disbursed_Ratio": disbursed_ratio,
-                    "Handover_Completed": is_handover_completed,
-                    "Interest_Rate": new_rate,
-                    "Console_XIRR": console_xirr if console_xirr is not None else 0.0
-                }])
-                conn.update(worksheet="Loan_Settings", data=updated_settings)
-                st.success(f"Interest rate dynamically updated to {new_rate}%!")
-                st.rerun()
 
     with m_col3:
         st.markdown(f"**Current Tenure Remaining**<br>{rem_years:.1f} Yrs<br><span style='color:#808495; font-size:13.5px;'>{int(current_rem_months)} Mos left</span>", unsafe_allow_html=True)
