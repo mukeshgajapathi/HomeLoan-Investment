@@ -589,7 +589,7 @@ with tab_aim:
 """, unsafe_allow_html=True)
 
     # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB (ALIGNED GOAL STATE) ---
-    with st.container(border=True):
+with st.container(border=True):
         pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
         st.markdown(f"**📉 Principal Cleared & Interest Recovery Tracker**")
         st.progress(min(pct_loan_cleared, 1.0))
