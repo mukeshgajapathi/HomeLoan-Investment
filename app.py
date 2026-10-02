@@ -157,7 +157,7 @@ def fetch_macro_fundamentals():
     slug_map = {
         "Nifty 50": "NIFTY",
         "Nifty Next 50": "NIFTYJR",
-        "Nifty Midcap 150": "NIFTYMIDCAP150",
+        "Nifty Midcap 150": "MIDCAP150",
         "Nifty Bank": "BANKNIFTY"
     }
     
