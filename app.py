@@ -155,10 +155,10 @@ def fetch_macro_fundamentals():
     }
     
     slug_map = {
-        "Nifty 50": "NIFTY",
-        "Nifty Next 50": "NIFTYJR",
-        "Nifty Midcap 150": "NMIDCAP150",
-        "Nifty Bank": "BANKNIFTY"
+        "Nifty 50": ["NIFTY"],
+        "Nifty Next 50": ["NIFTYJR"],
+        "Nifty Midcap 150": ["NMIDCAP150", "CNXMIDCAP"],
+        "Nifty Bank": ["BANKNIFTY"]
     }
     
     headers = {
@@ -166,46 +166,51 @@ def fetch_macro_fundamentals():
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
     }
     
-    for idx_name, slug in slug_map.items():
-        try:
-            url = f"https://www.screener.in/company/{slug}/"
-            resp = requests.get(url, headers=headers, timeout=4)
-            if resp.status_code == 200:
-                html = resp.text
-                pe_match = re.search(r'P/E\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
-                pb_match = re.search(r'Price to Book value\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
-                dy_match = re.search(r'Dividend Yield\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
-                
-                if pe_match:
-                    fundamentals[idx_name]["PE"] = float(pe_match.group(1))
-                if pb_match:
-                    fundamentals[idx_name]["PB"] = float(pb_match.group(1))
-                if dy_match:
-                    fundamentals[idx_name]["DY"] = float(dy_match.group(1))
-        except Exception:
-            pass 
+    for idx_name, slugs in slug_map.items():
+        for slug in slugs:
+            try:
+                url = f"https://www.screener.in/company/{slug}/"
+                resp = requests.get(url, headers=headers, timeout=4)
+                if resp.status_code == 200:
+                    html = resp.text
+                    pe_match = re.search(r'P/E\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                    pb_match = re.search(r'Price to Book value\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                    dy_match = re.search(r'Dividend Yield\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                    
+                    if pe_match:
+                        fundamentals[idx_name]["PE"] = float(pe_match.group(1))
+                    if pb_match:
+                        fundamentals[idx_name]["PB"] = float(pb_match.group(1))
+                    if dy_match:
+                        fundamentals[idx_name]["DY"] = float(dy_match.group(1))
+                    
+                    # If we successfully parsed PE and PB, stop checking secondary slugs
+                    if fundamentals[idx_name]["PE"] > 0 and fundamentals[idx_name]["PB"] > 0:
+                        break
+            except Exception:
+                pass 
             
     return fundamentals
 
 def evaluate_index_temp(index_name, pe, pb, dy):
     if pe <= 0.0 or pb <= 0.0:
-        return "⚠️ OFFLINE", "gray"
+        return "⚠️ OFFLINE", "#94A3B8", "rgba(148, 163, 184, 0.12)"
         
     if index_name == "Nifty Bank":
-        if pe > 21.0 or pb > 3.3: return "🌋 HARVEST", "red"
-        elif pe > 18.0 or pb > 2.8: return "🔥 TRIM", "orange"
-        elif pe > 15.0 or pb > 2.2: return "☀️ HOLD", "green"
-        else: return "❄️ ACCUMULATE", "blue"
+        if pe > 21.0 or pb > 3.3: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
+        elif pe > 18.0 or pb > 2.8: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
+        elif pe > 15.0 or pb > 2.2: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
+        else: return "❄️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
     elif index_name == "Nifty Midcap 150":
-        if pe > 30.0 or pb > 5.0: return "🌋 HARVEST", "red"
-        elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "orange"
-        elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "green"
-        else: return "❄️ ACCUMULATE", "blue"
+        if pe > 30.0 or pb > 5.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
+        elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
+        elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
+        else: return "❄️️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
     else: 
-        if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "red"
-        elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "orange"
-        elif pe > 21.0 or pb > 3.0: return "☀️ HOLD", "green"
-        else: return "❄️ ACCUMULATE", "blue"
+        if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
+        elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
+        elif pe > 21.0 or pb > 3.0: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
+        else: return "❄️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
 
 # --- UNIVERSAL HOLDINGS PARSER ---
 def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_id=None):
@@ -276,7 +281,7 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
                             "P&L (₹)": round(qty * (ltp - avg_price), 2)
                         })
         except ImportError:
-            st.error("⚠ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
             return client_id, pd.DataFrame()
 
     elif fname.endswith('.CSV'):
@@ -945,26 +950,11 @@ with tab_dashboard:
 
         hm_col1, hm_col2 = st.columns([3, 1])
         with hm_col1:
-            st.markdown("### 🚦 Fundamentals Evaluation")
+            st.markdown("### 🚦 Fundamental Heatmap (Live Market Temperature)")
         with hm_col2:
             with st.popover("ℹ️ View Valuation Logic"):
                 st.markdown("**1. Price-to-Earnings (P/E) Ratio**\nThe ultimate barometer of market sentiment (Fear vs. Greed).\n* **< 20 (Fear):** Cheap. Accumulate units.\n* **20–24 (Fair):** Normal market conditions.\n* **> 24 (Euphoria):** Overvalued. Optimal time to harvest profits.\n\n**2. Price-to-Book (P/B) Ratio**\nCompares price to actual net assets. Crucial for Banking ETFs.\n* **< 2.5 (Cheap):** Buying assets at a steep discount.\n* **2.5–3.5 (Fair):** Reasonably priced.\n* **> 3.5 (Bubble):** Flashing red warning to shift capital to debt reduction.\n\n**3. Dividend Yield**\n* **> 1.5% (High Yield):** Signals deep undervaluation.\n* **< 1.0% (Low Yield):** When market prices skyrocket in a bubble, the yield mathematically shrinks. A flashing red light to harvest capital.")
 
-        # Clean 5-column layout: Dividend Yield and Verdict separated
-        c_hdr1, c_hdr2, c_hdr3, c_hdr4, c_hdr5 = st.columns([2, 1, 1, 1, 1.4])
-        with c_hdr1:
-            st.markdown("**Core ETF & Index**")
-        with c_hdr2:
-            st.markdown("**P/E Ratio**")
-        with c_hdr3:
-            st.markdown("**P/B Ratio**")
-        with c_hdr4:
-            st.markdown("**Dividend Yield**")
-        with c_hdr5:
-            st.markdown("**Verdict**")
-
-        st.divider()
-        
         macro_data = fetch_macro_fundamentals()
         
         target_etfs = [
@@ -974,23 +964,48 @@ with tab_dashboard:
             ("BANKBEES", "Nifty Bank")
         ]
         
+        # Build responsive HTML table that preserves column alignment across all screen sizes
+        rows_html = ""
         for etf_sym, index_name in target_etfs:
             f_data = macro_data.get(index_name, {"PE": 0.0, "PB": 0.0, "DY": 0.0})
-            v_text, v_color = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
+            v_text, v_color, v_bg = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
             
-            ec1, ec2, ec3, ec4, ec5 = st.columns([2, 1, 1, 1, 1.4])
-            with ec1:
-                st.markdown(f"**{etf_sym}**\n\n:gray[{index_name}]")
-            with ec2:
-                st.markdown(f":{v_color}[**{f_data['PE']}**]")
-            with ec3:
-                st.markdown(f":{v_color}[**{f_data['PB']}**]")
-            with ec4:
-                st.markdown(f"{f_data['DY']}%")
-            with ec5:
-                st.markdown(f":{v_color}[**{v_text}**]")
-            
-            st.divider()
+            rows_html += f"""
+            <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+                <td style="padding: 12px 14px; vertical-align: middle;">
+                    <div style="font-weight: 700; color: #F8FAFC; font-size: 14.5px;">{etf_sym}</div>
+                    <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">{index_name}</div>
+                </td>
+                <td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data['PE']}</td>
+                <td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data['PB']}</td>
+                <td style="padding: 12px 14px; color: #CBD5E1; font-size: 13.5px; vertical-align: middle;">{f_data['DY']}%</td>
+                <td style="padding: 12px 14px; vertical-align: middle;">
+                    <span style="background: {v_bg}; color: {v_color}; padding: 5px 10px; border-radius: 8px; font-weight: 700; font-size: 12px; display: inline-block; white-space: nowrap; border: 1px solid {v_color}40;">
+                        {v_text}
+                    </span>
+                </td>
+            </tr>
+            """
+
+        table_html = f"""
+        <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 12px 0 20px 0; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <table style="width: 100%; border-collapse: collapse; min-width: 500px; font-family: inherit; text-align: left;">
+                <thead>
+                    <tr style="background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Core ETF & Index</th>
+                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/E Ratio</th>
+                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/B Ratio</th>
+                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Dividend Yield</th>
+                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Verdict</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+        </div>
+        """
+        st.markdown(table_html, unsafe_allow_html=True)
 
         st.write("")
         
