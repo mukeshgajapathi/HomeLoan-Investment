@@ -948,7 +948,7 @@ with tab_dashboard:
         
         st.divider()
 
-        with st.expander("🚦 Fundamental Heatmap (Live Market Temperature)", expanded=False):
+        with st.expander("🚦 Fundamental Analysis (Live)", expanded=False):
             hm_col1, hm_col2 = st.columns([3, 1])
             with hm_col1:
                 st.caption("Live valuation benchmarks across core index ETFs to inform disciplined profit harvesting.")
