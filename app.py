@@ -168,21 +168,22 @@ def fetch_macro_fundamentals():
     return fundamentals
 
 def evaluate_index_temp(index_name, pe, pb, dy):
+    # Returns native Streamlit color names (red, orange, green, blue)
     if index_name == "Nifty Bank":
-        if pe > 21.0 or pb > 3.3: return "🌋 HARVEST", "#FF4B4B"
-        elif pe > 18.0 or pb > 2.8: return "🔥 TRIM", "#FBBF24"
-        elif pe > 15.0 or pb > 2.2: return "☀️ HOLD", "#00CC96"
-        else: return "❄️ ACCUMULATE", "#38BDF8"
+        if pe > 21.0 or pb > 3.3: return "🌋 HARVEST", "red"
+        elif pe > 18.0 or pb > 2.8: return "🔥 TRIM", "orange"
+        elif pe > 15.0 or pb > 2.2: return "☀️ HOLD", "green"
+        else: return "❄️ ACCUMULATE", "blue"
     elif index_name == "Nifty Midcap 150":
-        if pe > 30.0 or pb > 5.0: return "🌋 HARVEST", "#FF4B4B"
-        elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "#FBBF24"
-        elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "#00CC96"
-        else: return "❄️ ACCUMULATE", "#38BDF8"
+        if pe > 30.0 or pb > 5.0: return "🌋 HARVEST", "red"
+        elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "orange"
+        elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "green"
+        else: return "❄️ ACCUMULATE", "blue"
     else: # Nifty 50 and Nifty Next 50
-        if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "#FF4B4B"
-        elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "#FBBF24"
-        elif pe > 21.0 or pb > 3.0: return "☀️ HOLD", "#00CC96"
-        else: return "❄️ ACCUMULATE", "#38BDF8"
+        if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "red"
+        elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "orange"
+        elif pe > 21.0 or pb > 3.0: return "☀️ HOLD", "green"
+        else: return "❄️ ACCUMULATE", "blue"
             
 # --- UNIVERSAL HOLDINGS PARSER ---
 def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_id=None):
@@ -953,26 +954,23 @@ with tab_dashboard:
         
         st.divider()
 
-        st.markdown("### 🚦 Fundamental Heatmap (Live Market Temperature)")
-        
+        # Header with single consolidated Popover
+        hm_col1, hm_col2 = st.columns([3, 1])
+        with hm_col1:
+            st.markdown("### 🚦 Fundamental Heatmap (Live Market Temperature)")
+        with hm_col2:
+            with st.popover("ℹ️ View Valuation Logic"):
+                st.markdown("**1. Price-to-Earnings (P/E) Ratio**\nThe ultimate barometer of market sentiment (Fear vs. Greed).\n* **< 20 (Fear):** Cheap. Accumulate units.\n* **20–24 (Fair):** Normal market conditions.\n* **> 24 (Euphoria):** Overvalued. Optimal time to harvest profits.\n\n**2. Price-to-Book (P/B) Ratio**\nCompares price to actual net assets. Crucial for Banking ETFs.\n* **< 2.5 (Cheap):** Buying assets at a steep discount.\n* **2.5–3.5 (Fair):** Reasonably priced.\n* **> 3.5 (Bubble):** Flashing red warning to shift capital to debt reduction.\n\n**3. Dividend Yield**\n* **> 1.5% (High Yield):** Signals deep undervaluation.\n* **< 1.0% (Low Yield):** When market prices skyrocket in a bubble, the yield mathematically shrinks. A flashing red light to harvest capital.")
+
         c_hdr1, c_hdr2, c_hdr3, c_hdr4 = st.columns([2, 1, 1, 2])
         with c_hdr1:
             st.markdown("**Core ETF & Index**")
         with c_hdr2:
-            c_p1, c_p2 = st.columns([3, 1])
-            c_p1.markdown("**P/E Ratio**")
-            with c_p2.popover("ℹ️", help="Price-to-Earnings Logic"):
-                st.markdown("**Price-to-Earnings (P/E) Ratio**\n\nThe ultimate barometer of market sentiment (Fear vs. Greed).\n* **< 20 (Fear):** Cheap. Accumulate units.\n* **20–24 (Fair):** Normal market conditions.\n* **> 24 (Euphoria):** Overvalued. Optimal time to harvest profits.")
+            st.markdown("**P/E Ratio**")
         with c_hdr3:
-            c_b1, c_b2 = st.columns([3, 1])
-            c_b1.markdown("**P/B Ratio**")
-            with c_b2.popover("ℹ️", help="Price-to-Book Logic"):
-                st.markdown("**Price-to-Book (P/B) Ratio**\n\nCompares price to actual net assets. Crucial for Banking ETFs.\n* **< 2.5 (Cheap):** Buying assets at a steep discount.\n* **2.5–3.5 (Fair):** Reasonably priced.\n* **> 3.5 (Bubble):** Flashing red warning to shift capital to debt reduction.")
+            st.markdown("**P/B Ratio**")
         with c_hdr4:
-            c_y1, c_y2 = st.columns([4, 1])
-            c_y1.markdown("**Dividend Yield & Verdict**")
-            with c_y2.popover("ℹ️", help="Yield Logic"):
-                st.markdown("**Dividend Yield**\n\n* **> 1.5% (High Yield):** Signals deep undervaluation.\n* **< 1.0% (Low Yield):** When market prices skyrocket in a bubble, the yield mathematically shrinks. A flashing red light to harvest capital.")
+            st.markdown("**Dividend Yield & Verdict**")
 
         st.divider()
         
