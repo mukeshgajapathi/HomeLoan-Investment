@@ -146,7 +146,10 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
 # --- AUTOMATED MACRO & ADVANCED FUNDAMENTALS ENGINE ---
 @st.cache_data(ttl=3600)
 def fetch_live_macro_benchmarks():
-    """Dynamically fetches sovereign 10Y G-Sec yield and Buffett Indicator in real time."""
+    """
+    Dynamically fetches sovereign 10Y G-Sec yield and Buffett Indicator in real time.
+    Strictly returns 0.0 with NO hardcoded fallback numbers so errors are immediately visible.
+    """
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
@@ -156,7 +159,7 @@ def fetch_live_macro_benchmarks():
     live_gsec = 0.0
     try:
         url_bond = "https://tradingeconomics.com/india/government-bond-yield"
-        r_bond = requests.get(url_bond, headers=headers, timeout=4)
+        r_bond = requests.get(url_bond, headers=headers, timeout=5)
         if r_bond.status_code == 200:
             match = re.search(r'India 10Y\s*\|\s*([\d\.]+)', r_bond.text)
             if not match:
@@ -171,7 +174,7 @@ def fetch_live_macro_benchmarks():
     if live_gsec <= 0.0:
         try:
             url_inv = "https://in.investing.com/rates-bonds/india-10-year-bond-yield"
-            r_inv = requests.get(url_inv, headers=headers, timeout=4)
+            r_inv = requests.get(url_inv, headers=headers, timeout=5)
             if r_inv.status_code == 200:
                 match = re.search(r'data-test="instrument-price-last"[^>]*>([\d\.]+)', r_inv.text)
                 if match:
@@ -182,57 +185,73 @@ def fetch_live_macro_benchmarks():
     # 2. Dynamic Live Buffett Indicator (India Market Cap-to-GDP %)
     live_buffett = 0.0
 
-    # Primary Source: GuruFocus Global Market Valuation (Direct Server-Rendered HTML)
+    # Primary Source: GuruFocus Dedicated Country Valuation page
     try:
         url_gf = "https://www.gurufocus.com/global-market-valuation.php?country=IND"
-        r_gf = requests.get(url_gf, headers=headers, timeout=5)
+        r_gf = requests.get(url_gf, headers=headers, timeout=6)
         if r_gf.status_code == 200:
             match = re.search(r'ratio of total market cap over GDP for India is\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
             if not match:
-                match = re.search(r'Ratio of total market cap over GDP:.*?current\s*-\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
+                match = re.search(r'current\s*-\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
+            if not match:
+                match = re.search(r'India\s*\|\s*[\d\.]+\s*\|\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
             if match:
                 val = float(match.group(1))
-                if 50.0 < val < 250.0:
+                if 40.0 < val < 300.0:
                     live_buffett = val
     except Exception:
         pass
 
-    # Secondary Source: GuruFocus Dedicated Economic Indicator Series
+    # Secondary Source: GuruFocus Global Overview Table
+    if live_buffett <= 0.0:
+        try:
+            url_gf_global = "https://www.gurufocus.com/global-market-valuation.php"
+            r_global = requests.get(url_gf_global, headers=headers, timeout=6)
+            if r_global.status_code == 200:
+                # Look for India row in the comparison table: "India | 3.61 | 117"
+                match = re.search(r'India\s*</td>\s*<td[^>]*>[\d\.]+</td>\s*<td[^>]*>([\d\.]+)%?</td>', r_global.text, re.IGNORECASE)
+                if not match:
+                    match = re.search(r'India\s*\|\s*[\d\.]+\s*\|\s*([\d\.]+)', r_global.text, re.IGNORECASE)
+                if match:
+                    val = float(match.group(1))
+                    if 40.0 < val < 300.0:
+                        live_buffett = val
+        except Exception:
+            pass
+
+    # Tertiary Source: GuruFocus Economic Indicator Series (Indicator 4324)
     if live_buffett <= 0.0:
         try:
             url_gf_ind = "https://www.gurufocus.com/economic_indicators/4324/india-ratio-of-total-market-cap-over-gdp"
-            r_ind = requests.get(url_gf_ind, headers=headers, timeout=5)
+            r_ind = requests.get(url_gf_ind, headers=headers, timeout=6)
             if r_ind.status_code == 200:
                 match = re.search(r'India Ratio of Total Market Cap over GDP.*?is (?:currently\s*)?([\d\.]+)%', r_ind.text, re.IGNORECASE)
                 if not match:
                     match = re.search(r'Buffett Indicator.*?:\s*([\d\.]+)', r_ind.text, re.IGNORECASE)
                 if match:
                     val = float(match.group(1))
-                    if 50.0 < val < 250.0:
+                    if 40.0 < val < 300.0:
                         live_buffett = val
         except Exception:
             pass
 
-    # Tertiary Source: MacroMicro Series
+    # Quaternary Source: StockManiacs Live Widget
     if live_buffett <= 0.0:
         try:
-            url_buffett = "https://en.macromicro.me/series/31848/india-bombay-stock-exchange-total-market-cap-gdp"
-            r_buf = requests.get(url_buffett, headers=headers, timeout=4)
-            if r_buf.status_code == 200:
-                match = re.search(r'class="stat-val"[^>]*>([\d\.]+)', r_buf.text)
+            url_sm = "https://www.stockmaniacs.net/freebies/free-tools/india-buffett-indicator-today/"
+            r_sm = requests.get(url_sm, headers=headers, timeout=5)
+            if r_sm.status_code == 200:
+                match = re.search(r'market valuation indicator for India is\s*([\d\.]+)%', r_sm.text, re.IGNORECASE)
                 if not match:
-                    match = re.search(r'([\d\.]+)\s*%', r_buf.text)
+                    match = re.search(r'Buffett Indicator =.*?([\d\.]+)%', r_sm.text, re.IGNORECASE)
                 if match:
                     val = float(match.group(1))
-                    if 50.0 < val < 250.0:
+                    if 40.0 < val < 300.0:
                         live_buffett = val
         except Exception:
             pass
 
-    # Robust fallback: Calibrated latest market baseline if external scrapers are temporarily throttled
-    if live_buffett <= 0.0:
-        live_buffett = 117.1
-
+    # Pure dynamic return: if scraping fails, return 0.0 without any fallback
     return live_gsec, live_buffett
 
 @st.cache_data(ttl=3600)
@@ -1053,23 +1072,35 @@ with tab_dashboard:
         with st.expander("🚦 Fundamental & Institutional Index Allocation Dashboard", expanded=False):
             st.caption("Automated macroeconomic valuation metrics and quality earnings benchmarking powered by real-time market data.")
             
-            with st.popover("ℹ️ View Institutional Methodology"):
-                st.markdown(r"""
-                ### 📐 Institutional Evaluation Framework
-
-                **1. Macro & Relative Yield Metrics**
-                * **Yield Gap:** Calculated as $\left(\frac{1}{\text{P/E}} \times 100\right) - \text{Live 10Y G-Sec Yield}$. Compares equity earnings yield against risk-free government paper. Narrow or negative spreads signal equity overvaluation.
-                * **Buffett Indicator:** Real-time Market Cap-to-GDP ratio. Values $> 115\%$ warn that top-down valuations are historically stretched.
-
-                **2. Quality & Growth Adjustments**
-                * **Consolidated Index ROE:** Approximated as $\left(\frac{\text{P/B}}{\text{P/E}}\right) \times 100$. A higher P/B is economically justified if ROE remains high.
-                * **PEG Ratio:** $\frac{\text{P/E}}{\text{Index Long-Term Growth Rate}}$. Prevents premature exits from high-growth mid-cap companies.
-                * **Forward P/E:** Estimated forward multiple adjusted for ongoing index earnings growth.
-                """)
-
             macro_data = fetch_macro_fundamentals()
             live_gsec_yield, live_buffett_ind = fetch_live_macro_benchmarks()
             buffett_status_text, buffett_color = get_buffett_status(live_buffett_ind)
+
+            buffett_display = f"{live_buffett_ind:.1f}%" if live_buffett_ind > 0 else "OFFLINE"
+            gsec_display = f"{live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "OFFLINE"
+
+            # Top-level single placement of nationwide macro metrics
+            macro_top_c1, macro_top_c2, macro_top_c3 = st.columns([1.5, 1.5, 1])
+            with macro_top_c1:
+                st.metric("🇮🇳 Buffett Indicator (Market Cap-to-GDP)", buffett_display, buffett_status_text)
+            with macro_top_c2:
+                st.metric("🏛️ 10Y Sovereign G-Sec Yield", gsec_display, "Risk-Free Benchmark")
+            with macro_top_c3:
+                with st.popover("ℹ️️ View Institutional Methodology"):
+                    st.markdown(r"""
+                    ### 📐 Institutional Evaluation Framework
+
+                    **1. Macro & Relative Yield Metrics**
+                    * **Buffett Indicator:** Real-time Market Cap-to-GDP ratio for India. Values $> 115\%$ warn that broad market valuations are historically stretched.
+                    * **Yield Gap:** Calculated as $\left(\frac{1}{\text{P/E}} \times 100\right) - \text{Live 10Y G-Sec Yield}$. Compares equity earnings yield against risk-free sovereign debt. Narrow or negative spreads signal equity overvaluation.
+
+                    **2. Quality & Growth Adjustments**
+                    * **Consolidated Index ROE:** Approximated as $\left(\frac{\text{P/B}}{\text{P/E}}\right) \times 100$. A higher P/B is economically justified if ROE remains elevated.
+                    * **PEG Ratio:** $\frac{\text{P/E}}{\text{Index Long-Term Growth Rate}}$. Prevents premature exits from high-growth companies.
+                    * **Forward P/E:** Estimated forward multiple adjusted for ongoing index earnings growth.
+                    """)
+
+            st.divider()
 
             target_etfs = [
                 ("NIFTYBEES", "Nifty 50"),
@@ -1077,8 +1108,6 @@ with tab_dashboard:
                 ("MIDCAPETF", "Nifty Midcap 150"),
                 ("BANKBEES", "Nifty Bank")
             ]
-
-            st.write("")
 
             for etf_sym, index_name in target_etfs:
                 f_data = macro_data.get(index_name, {"PE": 0.0, "PB": 0.0, "DY": 0.0, "GROWTH": 0.0})
@@ -1095,18 +1124,14 @@ with tab_dashboard:
                 roe_approx = ((pb / pe) * 100.0) if (pe > 0 and pb > 0) else 0.0
                 forward_pe = (pe / (1.0 + (growth_rate / 100.0))) if (pe > 0 and growth_rate > 0) else 0.0
                 
-                # Expander Header containing P/E and Buffett Indicator
+                # Clean Expander Header containing only P/E and Verdict
                 pe_display = f"{pe:.1f}" if pe > 0 else "OFFLINE"
-                buffett_display = f"{live_buffett_ind:.1f}%" if live_buffett_ind > 0 else "OFFLINE"
-                expander_title = (
-                    f"📈 {etf_sym} ({index_name})  |  P/E: {pe_display}  |  "
-                    f"Buffett Indicator: {buffett_display} ({buffett_status_text.split(' ')[0]})  |  {v_text}"
-                )
+                expander_title = f"📈 {etf_sym} ({index_name})  |  P/E: {pe_display}  |  {v_text}"
 
                 with st.expander(expander_title, expanded=False):
-                    # Section 1: Macro & Relative Yield Metrics
+                    # Section 1: Macro & Relative Yield Metrics (3 columns)
                     st.markdown("#### 1. 🌐 Macro & Relative Yield Metrics")
-                    m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+                    m_c1, m_c2, m_c3 = st.columns(3)
                     with m_c1:
                         st.metric("Index P/E", f"{pe:.1f}" if pe > 0 else "N/A", f"P/B: {pb:.2f}" if pb > 0 else "N/A")
                     with m_c2:
@@ -1114,10 +1139,8 @@ with tab_dashboard:
                     with m_c3:
                         yg_color = "normal" if yield_gap >= 0 else "inverse"
                         yg_display = f"{yield_gap:+.2f}%" if (pe > 0 and live_gsec_yield > 0) else "N/A"
-                        gsec_display = f"10Y G-Sec: {live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "10Y G-Sec: OFFLINE"
-                        st.metric("Yield Gap (vs 10Y G-Sec)", yg_display, gsec_display, delta_color=yg_color)
-                    with m_c4:
-                        st.metric("Buffett Indicator", buffett_display, buffett_status_text)
+                        gsec_subtext = f"10Y G-Sec: {live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "10Y G-Sec: OFFLINE"
+                        st.metric("Yield Gap (vs 10Y G-Sec)", yg_display, gsec_subtext, delta_color=yg_color)
 
                     if pe > 0 and live_gsec_yield > 0:
                         assessment_msg = "Equities offer healthy premium over bonds." if yield_gap > 0 else f"Equities offer no premium over {live_gsec_yield:.2f}% risk-free G-Secs (Exercise disciplined harvesting)."
