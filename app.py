@@ -151,15 +151,18 @@ def fetch_live_macro_benchmarks():
     Strictly returns 0.0 with NO hardcoded fallback numbers so errors are immediately visible.
     """
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     }
     
     # 1. Dynamic Live 10Y G-Sec Yield
     live_gsec = 0.0
     try:
         url_bond = "https://tradingeconomics.com/india/government-bond-yield"
-        r_bond = requests.get(url_bond, headers=headers, timeout=5)
+        r_bond = requests.get(url_bond, headers=headers, timeout=6)
         if r_bond.status_code == 200:
             match = re.search(r'India 10Y\s*\|\s*([\d\.]+)', r_bond.text)
             if not match:
@@ -174,7 +177,7 @@ def fetch_live_macro_benchmarks():
     if live_gsec <= 0.0:
         try:
             url_inv = "https://in.investing.com/rates-bonds/india-10-year-bond-yield"
-            r_inv = requests.get(url_inv, headers=headers, timeout=5)
+            r_inv = requests.get(url_inv, headers=headers, timeout=6)
             if r_inv.status_code == 200:
                 match = re.search(r'data-test="instrument-price-last"[^>]*>([\d\.]+)', r_inv.text)
                 if match:
@@ -185,14 +188,16 @@ def fetch_live_macro_benchmarks():
     # 2. Dynamic Live Buffett Indicator (India Market Cap-to-GDP %)
     live_buffett = 0.0
 
-    # Primary Source: GuruFocus Dedicated Country Valuation page
+    # Source A: GuruFocus Dedicated Country Valuation page
     try:
         url_gf = "https://www.gurufocus.com/global-market-valuation.php?country=IND"
-        r_gf = requests.get(url_gf, headers=headers, timeout=6)
+        r_gf = requests.get(url_gf, headers=headers, timeout=7)
         if r_gf.status_code == 200:
-            match = re.search(r'ratio of total market cap over GDP for India is\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
+            match = re.search(r'current\s*[-:]\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
             if not match:
-                match = re.search(r'current\s*-\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
+                match = re.search(r'ratio of total market cap over GDP for India is\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
+            if not match:
+                match = re.search(r'Ratio of total market cap over GDP[\s\S]*?current\s*[-:]\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
             if not match:
                 match = re.search(r'India\s*\|\s*[\d\.]+\s*\|\s*([\d\.]+)%', r_gf.text, re.IGNORECASE)
             if match:
@@ -202,13 +207,46 @@ def fetch_live_macro_benchmarks():
     except Exception:
         pass
 
-    # Secondary Source: GuruFocus Global Overview Table
+    # Source B: GuruFocus Economic Indicator Series (Indicator 4324)
+    if live_buffett <= 0.0:
+        try:
+            url_gf_ind = "https://www.gurufocus.com/economic_indicators/4324/india-ratio-of-total-market-cap-over-gdp"
+            r_ind = requests.get(url_gf_ind, headers=headers, timeout=7)
+            if r_ind.status_code == 200:
+                match = re.search(r'India Ratio of Total Market Cap over GDP\s*(?::|is currently)\s*([\d\.]+)%', r_ind.text, re.IGNORECASE)
+                if not match:
+                    match = re.search(r'Ratio of Total Market Cap over GDP.*?is (?:currently\s*)?([\d\.]+)%', r_ind.text, re.IGNORECASE)
+                if not match:
+                    match = re.search(r'Last Value\s*\|\s*([\d\.]+)%', r_ind.text, re.IGNORECASE)
+                if not match:
+                    match = re.search(r'Buffett Indicator.*?:\s*([\d\.]+)', r_ind.text, re.IGNORECASE)
+                if match:
+                    val = float(match.group(1))
+                    if 40.0 < val < 300.0:
+                        live_buffett = val
+        except Exception:
+            pass
+
+    # Source C: MacroMicro India Total Market Cap to GDP Series
+    if live_buffett <= 0.0:
+        try:
+            url_mm = "https://en.macromicro.me/series/31848/india-bombay-stock-exchange-total-market-cap-gdp"
+            r_mm = requests.get(url_mm, headers=headers, timeout=6)
+            if r_mm.status_code == 200:
+                match = re.search(r'India\s*-\s*Buffett Indicator[\s\S]*?([\d\.]+)\s*%', r_mm.text, re.IGNORECASE)
+                if match:
+                    val = float(match.group(1))
+                    if 40.0 < val < 300.0:
+                        live_buffett = val
+        except Exception:
+            pass
+
+    # Source D: GuruFocus Global Overview Comparison Table
     if live_buffett <= 0.0:
         try:
             url_gf_global = "https://www.gurufocus.com/global-market-valuation.php"
-            r_global = requests.get(url_gf_global, headers=headers, timeout=6)
+            r_global = requests.get(url_gf_global, headers=headers, timeout=7)
             if r_global.status_code == 200:
-                # Look for India row in the comparison table: "India | 3.61 | 117"
                 match = re.search(r'India\s*</td>\s*<td[^>]*>[\d\.]+</td>\s*<td[^>]*>([\d\.]+)%?</td>', r_global.text, re.IGNORECASE)
                 if not match:
                     match = re.search(r'India\s*\|\s*[\d\.]+\s*\|\s*([\d\.]+)', r_global.text, re.IGNORECASE)
@@ -219,27 +257,11 @@ def fetch_live_macro_benchmarks():
         except Exception:
             pass
 
-    # Tertiary Source: GuruFocus Economic Indicator Series (Indicator 4324)
-    if live_buffett <= 0.0:
-        try:
-            url_gf_ind = "https://www.gurufocus.com/economic_indicators/4324/india-ratio-of-total-market-cap-over-gdp"
-            r_ind = requests.get(url_gf_ind, headers=headers, timeout=6)
-            if r_ind.status_code == 200:
-                match = re.search(r'India Ratio of Total Market Cap over GDP.*?is (?:currently\s*)?([\d\.]+)%', r_ind.text, re.IGNORECASE)
-                if not match:
-                    match = re.search(r'Buffett Indicator.*?:\s*([\d\.]+)', r_ind.text, re.IGNORECASE)
-                if match:
-                    val = float(match.group(1))
-                    if 40.0 < val < 300.0:
-                        live_buffett = val
-        except Exception:
-            pass
-
-    # Quaternary Source: StockManiacs Live Widget
+    # Source E: StockManiacs Live Tracker
     if live_buffett <= 0.0:
         try:
             url_sm = "https://www.stockmaniacs.net/freebies/free-tools/india-buffett-indicator-today/"
-            r_sm = requests.get(url_sm, headers=headers, timeout=5)
+            r_sm = requests.get(url_sm, headers=headers, timeout=6)
             if r_sm.status_code == 200:
                 match = re.search(r'market valuation indicator for India is\s*([\d\.]+)%', r_sm.text, re.IGNORECASE)
                 if not match:
@@ -1124,9 +1146,8 @@ with tab_dashboard:
                 roe_approx = ((pb / pe) * 100.0) if (pe > 0 and pb > 0) else 0.0
                 forward_pe = (pe / (1.0 + (growth_rate / 100.0))) if (pe > 0 and growth_rate > 0) else 0.0
                 
-                # Clean Expander Header containing only P/E and Verdict
                 pe_display = f"{pe:.1f}" if pe > 0 else "OFFLINE"
-                expander_title = f"📈 {etf_sym} ({index_name})  |  P/E: {pe_display}  |  {v_text}"
+                expander_title = f"📈 {etf_sym} ({index_name})  •  P/E: {pe_display}  •  {v_text}"
 
                 with st.expander(expander_title, expanded=False):
                     # Section 1: Macro & Relative Yield Metrics (3 columns)
