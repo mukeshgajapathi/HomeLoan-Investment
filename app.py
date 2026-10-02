@@ -145,12 +145,65 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
 
 # --- AUTOMATED MACRO & ADVANCED FUNDAMENTALS ENGINE ---
 @st.cache_data(ttl=3600)
+def fetch_live_macro_benchmarks():
+    """Dynamically fetches sovereign 10Y G-Sec yield and Buffett Indicator in real time."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    }
+    
+    # 1. Dynamic Live 10Y G-Sec Yield
+    live_gsec = 0.0
+    try:
+        url_bond = "https://tradingeconomics.com/india/government-bond-yield"
+        r_bond = requests.get(url_bond, headers=headers, timeout=4)
+        if r_bond.status_code == 200:
+            match = re.search(r'India 10Y\s*\|\s*([\d\.]+)', r_bond.text)
+            if not match:
+                match = re.search(r'id=["\']market-value["\']>([\d\.]+)', r_bond.text)
+            if not match:
+                match = re.search(r'India 10-Year.*?yield.*?([\d\.]+)%', r_bond.text, re.IGNORECASE)
+            if match:
+                live_gsec = float(match.group(1))
+    except Exception:
+        pass
+        
+    if live_gsec <= 0.0:
+        try:
+            url_inv = "https://in.investing.com/rates-bonds/india-10-year-bond-yield"
+            r_inv = requests.get(url_inv, headers=headers, timeout=4)
+            if r_inv.status_code == 200:
+                match = re.search(r'data-test="instrument-price-last"[^>]*>([\d\.]+)', r_inv.text)
+                if match:
+                    live_gsec = float(match.group(1))
+        except Exception:
+            pass
+
+    # 2. Dynamic Live Buffett Indicator (India Market Cap-to-GDP %)
+    live_buffett = 0.0
+    try:
+        url_buffett = "https://en.macromicro.me/series/31848/india-bombay-stock-exchange-total-market-cap-gdp"
+        r_buf = requests.get(url_buffett, headers=headers, timeout=4)
+        if r_buf.status_code == 200:
+            match = re.search(r'class="stat-val"[^>]*>([\d\.]+)', r_buf.text)
+            if not match:
+                match = re.search(r'([\d\.]+)\s*%', r_buf.text)
+            if match:
+                val = float(match.group(1))
+                if 50.0 < val < 250.0:
+                    live_buffett = val
+    except Exception:
+        pass
+
+    return live_gsec, live_buffett
+
+@st.cache_data(ttl=3600)
 def fetch_macro_fundamentals():
     fundamentals = {
-        "Nifty 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
-        "Nifty Next 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
-        "Nifty Midcap 150": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
-        "Nifty Bank": {"PE": 0.0, "PB": 0.0, "DY": 0.0}
+        "Nifty 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0, "GROWTH": 0.0},
+        "Nifty Next 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0, "GROWTH": 0.0},
+        "Nifty Midcap 150": {"PE": 0.0, "PB": 0.0, "DY": 0.0, "GROWTH": 0.0},
+        "Nifty Bank": {"PE": 0.0, "PB": 0.0, "DY": 0.0, "GROWTH": 0.0}
     }
     
     slug_map = {
@@ -175,6 +228,9 @@ def fetch_macro_fundamentals():
                     pe_match = re.search(r'P/E\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
                     pb_match = re.search(r'Price to Book value\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
                     dy_match = re.search(r'Dividend Yield\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                    cagr_match = re.search(r'CAGR\s*10Yr\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                    if not cagr_match:
+                        cagr_match = re.search(r'CAGR\s*5Yr\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
                     
                     if pe_match:
                         fundamentals[idx_name]["PE"] = float(pe_match.group(1))
@@ -182,6 +238,8 @@ def fetch_macro_fundamentals():
                         fundamentals[idx_name]["PB"] = float(pb_match.group(1))
                     if dy_match:
                         fundamentals[idx_name]["DY"] = float(dy_match.group(1))
+                    if cagr_match:
+                        fundamentals[idx_name]["GROWTH"] = float(cagr_match.group(1))
                     
                     if fundamentals[idx_name]["PE"] > 0 and fundamentals[idx_name]["PB"] > 0:
                         break
@@ -190,55 +248,9 @@ def fetch_macro_fundamentals():
             
     return fundamentals
 
-# Institutional Benchmarks & Metadata for the 4 Core ETFs
-INDEX_METRIC_CONFIG = {
-    "NIFTYBEES": {
-        "index_name": "Nifty 50",
-        "expected_growth": 13.0,       # Projected 1-yr EPS growth (%)
-        "historical_median_pe_10y": 21.8,
-        "historical_std_pe_10y": 3.2,
-        "expense_ratio": 0.04,         # %
-        "tracking_error_1y": 0.03,      # %
-        "inav_spread_est": "+0.04%",
-        "weight_in_core": "Anchor / Large-Cap Core"
-    },
-    "NEXT50IETF": {
-        "index_name": "Nifty Next 50",
-        "expected_growth": 16.5,
-        "historical_median_pe_10y": 21.0,
-        "historical_std_pe_10y": 4.1,
-        "expense_ratio": 0.15,
-        "tracking_error_1y": 0.06,
-        "inav_spread_est": "+0.08%",
-        "weight_in_core": "Emerging Bluechips"
-    },
-    "MIDCAPETF": {
-        "index_name": "Nifty Midcap 150",
-        "expected_growth": 19.5,
-        "historical_median_pe_10y": 24.5,
-        "historical_std_pe_10y": 4.8,
-        "expense_ratio": 0.22,
-        "tracking_error_1y": 0.08,
-        "inav_spread_est": "+0.12%",
-        "weight_in_core": "High-Alpha Mid-Cap Core"
-    },
-    "BANKBEES": {
-        "index_name": "Nifty Bank",
-        "expected_growth": 14.5,
-        "historical_median_pe_10y": 16.8,
-        "historical_std_pe_10y": 2.9,
-        "expense_ratio": 0.16,
-        "tracking_error_1y": 0.05,
-        "inav_spread_est": "+0.06%",
-        "weight_in_core": "Financial Engine"
-    }
-}
-
-INDIA_10Y_GSEC_YIELD = 6.78            # Live RBI 10Y Benchmark G-Sec (%)
-INDIA_BUFFETT_INDICATOR = 132.4        # India Market Cap-to-GDP Ratio (%)
-
 def get_buffett_status(ratio):
-    if ratio < 75.0: return "Deep Value (<75%)", "#38BDF8"
+    if ratio <= 0.0: return "⚠️ OFFLINE", "#94A3B8"
+    elif ratio < 75.0: return "Deep Value (<75%)", "#38BDF8"
     elif ratio < 95.0: return "Fair Value (75-95%)", "#10B981"
     elif ratio < 115.0: return "Modestly Overvalued (95-115%)", "#F59E0B"
     else: return "Significantly Stretched (>115%)", "#EF4444"
@@ -256,7 +268,7 @@ def evaluate_index_temp(index_name, pe, pb, dy):
         if pe > 30.0 or pb > 5.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
         elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
         elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
-        else: return "❄️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
+        else: return "❄️️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
     else: 
         if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
         elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
@@ -1001,31 +1013,25 @@ with tab_dashboard:
 
         # Outermost Collapsible Bar for Full Fundamental Dashboard
         with st.expander("🚦 Fundamental & Institutional Index Allocation Dashboard", expanded=False):
-            st.caption("Automated macroeconomic valuation metrics, quality earnings benchmarking, statistical percentiles, and live ETF execution spreads.")
+            st.caption("Automated macroeconomic valuation metrics and quality earnings benchmarking powered by real-time market data.")
             
             with st.popover("ℹ️ View Institutional Methodology"):
                 st.markdown(r"""
                 ### 📐 Institutional Evaluation Framework
 
                 **1. Macro & Relative Yield Metrics**
-                * **Yield Gap:** Calculated as $\left(\frac{1}{\text{P/E}} \times 100\right) - \text{10Y G-Sec Yield}$. Compares equity earnings yield against risk-free government paper ($6.78\%$). Narrow or negative spreads signal overvaluation.
-                * **Buffett Indicator:** Market Cap-to-GDP ratio. Values $> 115\%$ warn that top-down valuations are historically stretched.
+                * **Yield Gap:** Calculated as $\left(\frac{1}{\text{P/E}} \times 100\right) - \text{Live 10Y G-Sec Yield}$. Compares equity earnings yield against risk-free government paper. Narrow or negative spreads signal equity overvaluation.
+                * **Buffett Indicator:** Real-time Market Cap-to-GDP ratio. Values $> 115\%$ warn that top-down valuations are historically stretched.
 
                 **2. Quality & Growth Adjustments**
-                * **Consolidated Index ROE:** Approximated as $\left(\frac{\text{P/B}}{\text{P/E}}\right) \times 100$. A higher P/B is economically justified if ROE remains above $16\text{--}18\%$.
-                * **PEG Ratio:** $\frac{\text{P/E}}{\text{Forward EPS Growth Rate}}$. Prevents premature exits from high-growth mid-cap companies.
-                * **Forward P/E:** Estimated 1-year forward consensus earnings valuation.
-
-                **3. Statistical Spreads & Implementation**
-                * **Percentile & Z-Score:** Measures how many standard deviations current P/E sits away from its 10-year mean.
-                * **Mid-to-Large Cap Ratio:** Compares Midcap 150 P/E to Nifty 50 P/E. Spreads $> 1.35\times$ indicate aggressive mid-cap overheating.
-                * **iNAV Spread:** Real-time indicative premium/discount between traded ETF market price and fair asset value.
+                * **Consolidated Index ROE:** Approximated as $\left(\frac{\text{P/B}}{\text{P/E}}\right) \times 100$. A higher P/B is economically justified if ROE remains high.
+                * **PEG Ratio:** $\frac{\text{P/E}}{\text{Index Long-Term Growth Rate}}$. Prevents premature exits from high-growth mid-cap companies.
+                * **Forward P/E:** Estimated forward multiple adjusted for ongoing index earnings growth.
                 """)
 
             macro_data = fetch_macro_fundamentals()
-            nifty50_pe = macro_data.get("Nifty 50", {}).get("PE", 0.0)
-
-            buffett_status_text, buffett_color = get_buffett_status(INDIA_BUFFETT_INDICATOR)
+            live_gsec_yield, live_buffett_ind = fetch_live_macro_benchmarks()
+            buffett_status_text, buffett_color = get_buffett_status(live_buffett_ind)
 
             target_etfs = [
                 ("NIFTYBEES", "Nifty 50"),
@@ -1037,36 +1043,26 @@ with tab_dashboard:
             st.write("")
 
             for etf_sym, index_name in target_etfs:
-                f_data = macro_data.get(index_name, {"PE": 0.0, "PB": 0.0, "DY": 0.0})
+                f_data = macro_data.get(index_name, {"PE": 0.0, "PB": 0.0, "DY": 0.0, "GROWTH": 0.0})
                 pe = f_data["PE"]
                 pb = f_data["PB"]
                 dy = f_data["DY"]
+                growth_rate = f_data.get("GROWTH", 0.0)
                 v_text, v_color, v_bg = evaluate_index_temp(index_name, pe, pb, dy)
-                cfg = INDEX_METRIC_CONFIG.get(etf_sym, {})
                 
-                # Metric calculations
+                # Dynamic calculations based on live fetched data
                 earnings_yield = (100.0 / pe) if pe > 0 else 0.0
-                yield_gap = (earnings_yield - INDIA_10Y_GSEC_YIELD) if pe > 0 else 0.0
-                growth_rate = cfg.get("expected_growth", 14.0)
+                yield_gap = (earnings_yield - live_gsec_yield) if (pe > 0 and live_gsec_yield > 0) else 0.0
                 peg_ratio = (pe / growth_rate) if (pe > 0 and growth_rate > 0) else 0.0
                 roe_approx = ((pb / pe) * 100.0) if (pe > 0 and pb > 0) else 0.0
-                forward_pe = (pe / (1.0 + (growth_rate / 100.0))) if pe > 0 else 0.0
-                
-                # Z-Score & 10Y Percentile
-                med_pe = cfg.get("historical_median_pe_10y", 21.0)
-                std_pe = cfg.get("historical_std_pe_10y", 3.0)
-                z_score = ((pe - med_pe) / std_pe) if std_pe > 0 and pe > 0 else 0.0
-                # Normal approximation for percentile
-                percentile = max(1.0, min(99.0, 50.0 + (z_score * 34.0))) if pe > 0 else 0.0
-
-                # Spread against Nifty 50
-                mid_large_spread = (pe / nifty50_pe) if (nifty50_pe > 0 and pe > 0) else 1.0
+                forward_pe = (pe / (1.0 + (growth_rate / 100.0))) if (pe > 0 and growth_rate > 0) else 0.0
                 
                 # Expander Header containing P/E and Buffett Indicator
                 pe_display = f"{pe:.1f}" if pe > 0 else "OFFLINE"
+                buffett_display = f"{live_buffett_ind:.1f}%" if live_buffett_ind > 0 else "OFFLINE"
                 expander_title = (
                     f"📈 {etf_sym} ({index_name})  |  P/E: {pe_display}  |  "
-                    f"Buffett Indicator: {INDIA_BUFFETT_INDICATOR:.1f}% ({buffett_status_text.split(' ')[0]})  |  {v_text}"
+                    f"Buffett Indicator: {buffett_display} ({buffett_status_text.split(' ')[0]})  |  {v_text}"
                 )
 
                 with st.expander(expander_title, expanded=False):
@@ -1074,19 +1070,22 @@ with tab_dashboard:
                     st.markdown("#### 1. 🌐 Macro & Relative Yield Metrics")
                     m_c1, m_c2, m_c3, m_c4 = st.columns(4)
                     with m_c1:
-                        st.metric("Index P/E", f"{pe:.1f}" if pe > 0 else "N/A", f"P/B: {pb:.2f}")
+                        st.metric("Index P/E", f"{pe:.1f}" if pe > 0 else "N/A", f"P/B: {pb:.2f}" if pb > 0 else "N/A")
                     with m_c2:
-                        st.metric("Earnings Yield (1/PE)", f"{earnings_yield:.2f}%", f"Div Yield: {dy:.2f}%")
+                        st.metric("Earnings Yield (1/PE)", f"{earnings_yield:.2f}%" if earnings_yield > 0 else "N/A", f"Div Yield: {dy:.2f}%" if dy > 0 else "N/A")
                     with m_c3:
                         yg_color = "normal" if yield_gap >= 0 else "inverse"
-                        st.metric("Yield Gap (vs 10Y G-Sec)", f"{yield_gap:+.2f}%", f"10Y G-Sec: {INDIA_10Y_GSEC_YIELD:.2f}%", delta_color=yg_color)
+                        yg_display = f"{yield_gap:+.2f}%" if (pe > 0 and live_gsec_yield > 0) else "N/A"
+                        gsec_display = f"10Y G-Sec: {live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "10Y G-Sec: OFFLINE"
+                        st.metric("Yield Gap (vs 10Y G-Sec)", yg_display, gsec_display, delta_color=yg_color)
                     with m_c4:
-                        st.metric("Buffett Indicator", f"{INDIA_BUFFETT_INDICATOR:.1f}%", buffett_status_text)
+                        st.metric("Buffett Indicator", buffett_display, buffett_status_text)
 
-                    st.markdown(
-                        f":gray[**Yield Gap Assessment:** Equity risk premium is `{yield_gap:+.2f}%`. "
-                        f"{'Equities offer healthy premium over bonds.' if yield_gap > 0 else 'Equities offer no premium over 6.78% risk-free G-Secs (Exercise disciplined harvesting).'}]"
-                    )
+                    if pe > 0 and live_gsec_yield > 0:
+                        assessment_msg = "Equities offer healthy premium over bonds." if yield_gap > 0 else f"Equities offer no premium over {live_gsec_yield:.2f}% risk-free G-Secs (Exercise disciplined harvesting)."
+                        st.markdown(f":gray[**Yield Gap Assessment:** Equity risk premium is `{yield_gap:+.2f}%`. {assessment_msg}]")
+                    else:
+                        st.markdown(":gray[**Yield Gap Assessment:** ⚠️ Live bond or equity multiple feed offline. Calculations paused.]")
                     
                     st.divider()
 
@@ -1094,53 +1093,24 @@ with tab_dashboard:
                     st.markdown("#### 2. 💎 Earnings Quality & Growth Adjustments")
                     q_c1, q_c2, q_c3, q_c4 = st.columns(4)
                     with q_c1:
-                        st.metric("Consolidated ROE", f"{roe_approx:.2f}%", "Calculated as (P/B ÷ P/E) × 100")
+                        st.metric("Consolidated ROE", f"{roe_approx:.2f}%" if roe_approx > 0 else "N/A", "Calculated as (P/B ÷ P/E) × 100")
                     with q_c2:
-                        st.metric("Expected EPS Growth", f"{growth_rate:.1f}%", "1-Yr Consensus Estimate")
+                        growth_display = f"{growth_rate:.1f}%" if growth_rate > 0 else "OFFLINE"
+                        st.metric("Index Earnings Growth", growth_display, "Live Long-Term Index CAGR")
                     with q_c3:
-                        peg_status = "Undervalued (<1.0)" if peg_ratio < 1.0 else ("Fair (1.0-1.5)" if peg_ratio <= 1.5 else "Stretched (>1.5)")
-                        st.metric("PEG Ratio", f"{peg_ratio:.2f}", peg_status)
-                    with q_c4:
-                        st.metric("Forward 1Y P/E", f"{forward_pe:.1f}", f"Trailing: {pe:.1f}")
-
-                    st.markdown(
-                        f":gray[**Growth Defense:** Index ROE of `{roe_approx:.1f}%` with PEG of `{peg_ratio:.2f}`. "
-                        f"{'Valuation multiple is fully supported by earnings expansion.' if peg_ratio < 1.3 else 'High multiple requires watchful trailing profit delivery.'}]"
-                    )
-
-                    st.divider()
-
-                    # Section 3: Statistical Benchmarking & Spreads
-                    st.markdown("#### 3. 📊 Statistical Benchmarking & Spreads")
-                    s_c1, s_c2, s_c3, s_c4 = st.columns(4)
-                    with s_c1:
-                        st.metric("10Y Percentile Rank", f"{percentile:.0f}th %ile", f"10Y Median: {med_pe:.1f}")
-                    with s_c2:
-                        st.metric("10Y Z-Score", f"{z_score:+.2f} σ", f"Std Dev: ±{std_pe:.1f}")
-                    with s_c3:
-                        if etf_sym == "MIDCAPETF":
-                            spread_verdict = "Overheated (>1.35x)" if mid_large_spread > 1.35 else "Balanced (<1.35x)"
-                            st.metric("Mid-to-Large Spread", f"{mid_large_spread:.2f}x", spread_verdict)
-                        elif etf_sym == "NIFTYBEES":
-                            st.metric("Baseline Spread", "1.00x", "Market Benchmark")
+                        if peg_ratio > 0:
+                            peg_status = "Undervalued (<1.0)" if peg_ratio < 1.0 else ("Fair (1.0-1.5)" if peg_ratio <= 1.5 else "Stretched (>1.5)")
+                            st.metric("PEG Ratio", f"{peg_ratio:.2f}", peg_status)
                         else:
-                            st.metric("Spread vs Nifty 50", f"{mid_large_spread:.2f}x", "Relative Valuation")
-                    with s_c4:
-                        st.markdown(f"**Verdict:** <br><span style='background:{v_bg}; color:{v_color}; padding:6px 12px; border-radius:8px; font-weight:700; font-size:13px; border:1px solid {v_color}40; display:inline-block;'>{v_text}</span>", unsafe_allow_html=True)
+                            st.metric("PEG Ratio", "N/A", "Requires Live CAGR")
+                    with q_c4:
+                        st.metric("Forward 1Y P/E", f"{forward_pe:.1f}" if forward_pe > 0 else "N/A", f"Trailing: {pe:.1f}" if pe > 0 else "N/A")
 
-                    st.divider()
-
-                    # Section 4: Implementation & Execution Metrics (For ETF Buyers)
-                    st.markdown("#### 4. 🎯 Implementation & Execution Metrics (For ETF Buyers)")
-                    e_c1, e_c2, e_c3, e_c4 = st.columns(4)
-                    with e_c1:
-                        st.metric("Estimated iNAV Spread", cfg.get("inav_spread_est", "±0.05%"), "Market Price vs Fair iNAV")
-                    with e_c2:
-                        st.metric("Expense Ratio", f"{cfg.get('expense_ratio', 0.05):.2f}%", "Annual TER")
-                    with e_c3:
-                        st.metric("1-Yr Tracking Error", f"{cfg.get('tracking_error_1y', 0.04):.2f}%", "vs Underlying Index")
-                    with e_c4:
-                        st.markdown(f"**Core Role:** `{cfg.get('weight_in_core', 'Core Holding')}`<br><span style='color:#10B981; font-size:12px;'>Best Practice: Use Limit orders near iNAV</span>", unsafe_allow_html=True)
+                    if peg_ratio > 0:
+                        defense_msg = "Valuation multiple is fully supported by earnings expansion." if peg_ratio < 1.3 else "High multiple requires watchful trailing profit delivery."
+                        st.markdown(f":gray[**Growth Defense:** Index ROE of `{roe_approx:.1f}%` with PEG of `{peg_ratio:.2f}`. {defense_msg}]")
+                    else:
+                        st.markdown(f":gray[**Growth Defense:** Index ROE is `{roe_approx:.1f}%`. Quantitative PEG awaiting live index CAGR.]")
 
         st.write("")
         
