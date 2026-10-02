@@ -715,6 +715,32 @@ proj_date, proj_yrs, proj_mos = project_ndz_target(
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
+st.markdown("""
+<style>
+/* Enhanced Collapsible Expander Cards */
+div[data-testid="stExpander"] {
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 12px !important;
+    margin-bottom: 14px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+    transition: all 0.25s ease-in-out !important;
+}
+div[data-testid="stExpander"]:hover {
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+div[data-testid="stExpander"] summary {
+    padding: 14px 20px !important;
+}
+div[data-testid="stExpander"] summary p {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.3px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==========================================
 # --- TOP-LEVEL NAVIGATION & TABS ---
 # ==========================================
@@ -1122,8 +1148,7 @@ with tab_dashboard:
             buffett_display = f"{live_buffett_ind:.1f}%" if live_buffett_ind > 0 else "OFFLINE"
             gsec_display = f"{live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "OFFLINE"
 
-            # Top-level single placement of nationwide macro metrics with insightful tooltips
-            macro_top_c1, macro_top_c2, macro_top_c3 = st.columns([1.5, 1.5, 1])
+            macro_top_c1, macro_top_c2 = st.columns(2)
             with macro_top_c1:
                 st.metric(
                     "🇮🇳 Buffett Indicator (Market Cap-to-GDP)", 
@@ -1138,20 +1163,6 @@ with tab_dashboard:
                     "Risk-Free Benchmark",
                     help="💡 What It Means:\nThe annualized return guaranteed by the Government of India on its 10-year bonds. It serves as the risk-free benchmark hurdle rate.\n\n👑 Rule of Thumb (Warren Buffett & Benjamin Graham):\nStocks carry volatility and business risk. Therefore, equities must provide a meaningful profit premium above the 10Y G-Sec yield to justify investing. When safe G-Sec yields exceed equity yields, paying down debt becomes mathematically superior."
                 )
-            with macro_top_c3:
-                with st.popover("ℹ View Institutional Methodology"):
-                    st.markdown(r"""
-                    ### 📐 Institutional Evaluation Framework
-
-                    **1. Macro & Relative Yield Metrics**
-                    * **Buffett Indicator:** Real-time Market Cap-to-GDP ratio for India. Values $> 115\%$ warn that broad market valuations are historically stretched.
-                    * **Yield Gap:** Calculated as $\left(\frac{1}{\text{P/E}} \times 100\right) - \text{Live 10Y G-Sec Yield}$. Compares equity earnings yield against risk-free sovereign debt. Narrow or negative spreads signal equity overvaluation.
-
-                    **2. Quality & Growth Adjustments**
-                    * **Consolidated Index ROE:** Approximated as $\left(\frac{\text{P/B}}{\text{P/E}}\right) \times 100$. A higher P/B is economically justified if ROE remains elevated.
-                    * **PEG Ratio:** $\frac{\text{P/E}}{\text{Index Long-Term Growth Rate}}$. Prevents premature exits from high-growth companies.
-                    * **Forward P/E:** Estimated forward multiple adjusted for ongoing index earnings growth.
-                    """)
 
             st.divider()
 
@@ -1181,7 +1192,7 @@ with tab_dashboard:
                 expander_title = f"📈 {etf_sym} ({index_name})  •  {v_text}"
 
                 with st.expander(expander_title, expanded=False):
-                    # Section 1: Macro & Relative Yield Metrics with dedicated P/B Card
+                    # Section 1: Macro & Relative Yield Metrics
                     st.markdown("#### 1. 🌐 Macro & Relative Yield Metrics")
                     m_c1, m_c2, m_c3, m_c4 = st.columns(4)
                     with m_c1:
@@ -1231,12 +1242,6 @@ with tab_dashboard:
                         )
                         st.metric("Yield Gap (vs 10Y G-Sec)", yg_display, gsec_subtext, delta_color=yg_color, help=yg_help)
 
-                    if pe > 0 and live_gsec_yield > 0:
-                        assessment_msg = "Equities offer healthy premium over bonds." if yield_gap > 0 else f"Equities offer no premium over {live_gsec_yield:.2f}% risk-free G-Secs (Exercise disciplined harvesting)."
-                        st.markdown(f":gray[**Yield Gap Assessment:** Equity risk premium is `{yield_gap:+.2f}%`. {assessment_msg}]")
-                    else:
-                        st.markdown(":gray[**Yield Gap Assessment:** ⚠️ Live bond or equity multiple feed offline. Calculations paused.]")
-                    
                     st.divider()
 
                     # Section 2: Earnings Quality & Growth Adjustments
@@ -1284,12 +1289,6 @@ with tab_dashboard:
                         )
                         st.metric("Forward 1Y P/E", f"{forward_pe:.1f}" if forward_pe > 0 else "N/A", f"Trailing: {pe:.1f}" if pe > 0 else "N/A", help=fwd_help)
 
-                    if peg_ratio > 0:
-                        defense_msg = "Valuation multiple is fully supported by earnings expansion." if peg_ratio < 1.3 else "High multiple requires watchful trailing profit delivery."
-                        st.markdown(f":gray[**Growth Defense:** Index ROE of `{roe_approx:.1f}%` with PEG of `{peg_ratio:.2f}`. {defense_msg}]")
-                    else:
-                        st.markdown(f":gray[**Growth Defense:** Index ROE is `{roe_approx:.1f}%`. Quantitative PEG awaiting live index CAGR.]")
-
         st.write("")
         
         # Prepayment execution form
@@ -1297,7 +1296,7 @@ with tab_dashboard:
         
         with pp_input_col1:
             st.markdown("### 💸 Execute Part Payment")
-            pp_amount = st.number_input("Prepayment Amount (₹)", value=100000.0, step=10000.0, min_value=1.0)
+            pp_amount = st.number_input("Prepayment Amount (₹)", value=100000.0, step=10000.0, min_value=0.0)
             
             if st.button("Log Joyful Part Payment", type="primary"):
                 new_row = pd.DataFrame([{
