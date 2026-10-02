@@ -1187,12 +1187,6 @@ with tab_dashboard:
                         yg_display = f"{yield_gap:+.2f}%" if (pe > 0 and live_gsec_yield > 0) else "N/A"
                         gsec_subtext = f"10Y G-Sec: {live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "10Y G-Sec: OFFLINE"
                         st.metric("Yield Gap (vs 10Y G-Sec)", yg_display, gsec_subtext, delta_color=yg_color)
-
-                    if pe > 0 and live_gsec_yield > 0:
-                        assessment_msg = "Equities offer healthy premium over bonds." if yield_gap > 0 else f"Equities offer no premium over {live_gsec_yield:.2f}% risk-free G-Secs (Exercise disciplined harvesting)."
-                        st.markdown(f":gray[**Yield Gap Assessment:** Equity risk premium is `{yield_gap:+.2f}%`. {assessment_msg}]")
-                    else:
-                        st.markdown(":gray[**Yield Gap Assessment:** ⚠️ Live bond or equity multiple feed offline. Calculations paused.]")
                     
                     st.divider()
 
@@ -1212,12 +1206,6 @@ with tab_dashboard:
                             st.metric("PEG Ratio", "N/A", "Requires Live CAGR")
                     with q_c4:
                         st.metric("Forward 1Y P/E", f"{forward_pe:.1f}" if forward_pe > 0 else "N/A", f"Trailing: {pe:.1f}" if pe > 0 else "N/A")
-
-                    if peg_ratio > 0:
-                        defense_msg = "Valuation multiple is fully supported by earnings expansion." if peg_ratio < 1.3 else "High multiple requires watchful trailing profit delivery."
-                        st.markdown(f":gray[**Growth Defense:** Index ROE of `{roe_approx:.1f}%` with PEG of `{peg_ratio:.2f}`. {defense_msg}]")
-                    else:
-                        st.markdown(f":gray[**Growth Defense:** Index ROE is `{roe_approx:.1f}%`. Quantitative PEG awaiting live index CAGR.]")
 
         st.write("")
         
