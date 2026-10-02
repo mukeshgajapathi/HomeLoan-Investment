@@ -945,7 +945,7 @@ with tab_dashboard:
 
         hm_col1, hm_col2 = st.columns([3, 1])
         with hm_col1:
-            st.markdown("### 🚦 Fundamentals ")
+            st.markdown("### 🚦 Fundamentals Evaluation")
         with hm_col2:
             with st.popover("ℹ️ View Valuation Logic"):
                 st.markdown("**1. Price-to-Earnings (P/E) Ratio**\nThe ultimate barometer of market sentiment (Fear vs. Greed).\n* **< 20 (Fear):** Cheap. Accumulate units.\n* **20–24 (Fair):** Normal market conditions.\n* **> 24 (Euphoria):** Overvalued. Optimal time to harvest profits.\n\n**2. Price-to-Book (P/B) Ratio**\nCompares price to actual net assets. Crucial for Banking ETFs.\n* **< 2.5 (Cheap):** Buying assets at a steep discount.\n* **2.5–3.5 (Fair):** Reasonably priced.\n* **> 3.5 (Bubble):** Flashing red warning to shift capital to debt reduction.\n\n**3. Dividend Yield**\n* **> 1.5% (High Yield):** Signals deep undervaluation.\n* **< 1.0% (Low Yield):** When market prices skyrocket in a bubble, the yield mathematically shrinks. A flashing red light to harvest capital.")
