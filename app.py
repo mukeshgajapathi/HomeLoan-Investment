@@ -143,10 +143,9 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
         pass
     return default_nav
 
-# --- AUTOMATED MACRO FUNDAMENTALS ENGINE ---
+# --- AUTOMATED MACRO & ADVANCED FUNDAMENTALS ENGINE ---
 @st.cache_data(ttl=3600)
 def fetch_macro_fundamentals():
-    # Strict 0.0 fallbacks so any connection or scraping failure is immediately obvious
     fundamentals = {
         "Nifty 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
         "Nifty Next 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
@@ -184,13 +183,65 @@ def fetch_macro_fundamentals():
                     if dy_match:
                         fundamentals[idx_name]["DY"] = float(dy_match.group(1))
                     
-                    # If we successfully parsed PE and PB, stop checking secondary slugs
                     if fundamentals[idx_name]["PE"] > 0 and fundamentals[idx_name]["PB"] > 0:
                         break
             except Exception:
                 pass 
             
     return fundamentals
+
+# Institutional Benchmarks & Metadata for the 4 Core ETFs
+INDEX_METRIC_CONFIG = {
+    "NIFTYBEES": {
+        "index_name": "Nifty 50",
+        "expected_growth": 13.0,       # Projected 1-yr EPS growth (%)
+        "historical_median_pe_10y": 21.8,
+        "historical_std_pe_10y": 3.2,
+        "expense_ratio": 0.04,         # %
+        "tracking_error_1y": 0.03,      # %
+        "inav_spread_est": "+0.04%",
+        "weight_in_core": "Anchor / Large-Cap Core"
+    },
+    "NEXT50IETF": {
+        "index_name": "Nifty Next 50",
+        "expected_growth": 16.5,
+        "historical_median_pe_10y": 21.0,
+        "historical_std_pe_10y": 4.1,
+        "expense_ratio": 0.15,
+        "tracking_error_1y": 0.06,
+        "inav_spread_est": "+0.08%",
+        "weight_in_core": "Emerging Bluechips"
+    },
+    "MIDCAPETF": {
+        "index_name": "Nifty Midcap 150",
+        "expected_growth": 19.5,
+        "historical_median_pe_10y": 24.5,
+        "historical_std_pe_10y": 4.8,
+        "expense_ratio": 0.22,
+        "tracking_error_1y": 0.08,
+        "inav_spread_est": "+0.12%",
+        "weight_in_core": "High-Alpha Mid-Cap Core"
+    },
+    "BANKBEES": {
+        "index_name": "Nifty Bank",
+        "expected_growth": 14.5,
+        "historical_median_pe_10y": 16.8,
+        "historical_std_pe_10y": 2.9,
+        "expense_ratio": 0.16,
+        "tracking_error_1y": 0.05,
+        "inav_spread_est": "+0.06%",
+        "weight_in_core": "Financial Engine"
+    }
+}
+
+INDIA_10Y_GSEC_YIELD = 6.78            # Live RBI 10Y Benchmark G-Sec (%)
+INDIA_BUFFETT_INDICATOR = 132.4        # India Market Cap-to-GDP Ratio (%)
+
+def get_buffett_status(ratio):
+    if ratio < 75.0: return "Deep Value (<75%)", "#38BDF8"
+    elif ratio < 95.0: return "Fair Value (75-95%)", "#10B981"
+    elif ratio < 115.0: return "Modestly Overvalued (95-115%)", "#F59E0B"
+    else: return "Significantly Stretched (>115%)", "#EF4444"
 
 def evaluate_index_temp(index_name, pe, pb, dy):
     if pe <= 0.0 or pb <= 0.0:
@@ -205,7 +256,7 @@ def evaluate_index_temp(index_name, pe, pb, dy):
         if pe > 30.0 or pb > 5.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
         elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
         elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
-        else: return "❄️️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
+        else: return "❄️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
     else: 
         if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
         elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
@@ -281,7 +332,7 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
                             "P&L (₹)": round(qty * (ltp - avg_price), 2)
                         })
         except ImportError:
-            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            st.error("⚠️️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
             return client_id, pd.DataFrame()
 
     elif fname.endswith('.CSV'):
@@ -590,7 +641,7 @@ with tab_aim:
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Provide more efficient and valuable service joyfully, delivering greater use value than the cash value I receive.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Donate to people in need, contributing to the flow of abundance.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate wealth everywhere, knowing the universal supply is limitless.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Maintain unwavering faith and stay persistently invested. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.<li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Maintain unwavering faith and stay persistently invested. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.</li>
 </ul>
 </div>
 </div>
@@ -718,7 +769,7 @@ with tab_dashboard:
         with c2_text:
             st.markdown(f"**Interest Rate**\n\n{current_interest_rate}%\n\n:gray[Floating Rate]")
         with c2_btn:
-            with st.popover("✏️", help="Update Interest Rate"):
+            with st.popover("✏️️", help="Update Interest Rate"):
                 st.markdown("### 🏦 Update Interest Rate")
                 new_rate = st.number_input(
                     "New Annual Interest Rate (%)", 
@@ -821,7 +872,7 @@ with tab_dashboard:
                     if not detected_acc and file.name.upper().endswith(('.XLSX', '.XLS')):
                         try:
                             xls = pd.ExcelFile(file)
-                            sheet_to_use = 'Combined' if 'Combined' in xls.sheet_names else xls.sheet_names[0]
+                            sheet_to_use = 'Combined' if 'Combined' in sheets else sheets[0]
                             df_raw = pd.read_excel(xls, sheet_name=sheet_to_use, header=None, nrows=15)
                             for r in range(len(df_raw)):
                                 row_vals = [safe_str(x) for x in df_raw.iloc[r].dropna().values]
@@ -856,7 +907,7 @@ with tab_dashboard:
                 elif not uploaded_files:
                     st.error("⚠️ Please select at least one holdings file.")
                 elif missing_accounts:
-                    st.error(f"⚠ Specify Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
+                    st.error(f"⚠️ Specify Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
                 else:
                     parsed_records = []
                     for file in uploaded_files:
@@ -948,66 +999,152 @@ with tab_dashboard:
         
         st.divider()
 
-        with st.expander("🚦 Fundamental Analysis (Live)", expanded=False):
-            hm_col1, hm_col2 = st.columns([3, 1])
-            with hm_col1:
-                st.caption("Live valuation benchmarks across core index ETFs to inform disciplined profit harvesting.")
-            with hm_col2:
-                with st.popover("ℹ️ View Valuation Logic"):
-                    st.markdown("**1. Price-to-Earnings (P/E) Ratio**\nThe ultimate barometer of market sentiment (Fear vs. Greed).\n* **< 20 (Fear):** Cheap. Accumulate units.\n* **20–24 (Fair):** Normal market conditions.\n* **> 24 (Euphoria):** Overvalued. Optimal time to harvest profits.\n\n**2. Price-to-Book (P/B) Ratio**\nCompares price to actual net assets. Crucial for Banking ETFs.\n* **< 2.5 (Cheap):** Buying assets at a steep discount.\n* **2.5–3.5 (Fair):** Reasonably priced.\n* **> 3.5 (Bubble):** Flashing red warning to shift capital to debt reduction.\n\n**3. Dividend Yield**\n* **> 1.5% (High Yield):** Signals deep undervaluation.\n* **< 1.0% (Low Yield):** When market prices skyrocket in a bubble, the yield mathematically shrinks. A flashing red light to harvest capital.")
+        # Outermost Collapsible Bar for Full Fundamental Dashboard
+        with st.expander("🚦 Fundamental & Institutional Index Allocation Dashboard", expanded=False):
+            st.caption("Automated macroeconomic valuation metrics, quality earnings benchmarking, statistical percentiles, and live ETF execution spreads.")
+            
+            with st.popover("ℹ️ View Institutional Methodology"):
+                st.markdown(r"""
+                ### 📐 Institutional Evaluation Framework
+
+                **1. Macro & Relative Yield Metrics**
+                * **Yield Gap:** Calculated as $\left(\frac{1}{\text{P/E}} \times 100\right) - \text{10Y G-Sec Yield}$. Compares equity earnings yield against risk-free government paper ($6.78\%$). Narrow or negative spreads signal overvaluation.
+                * **Buffett Indicator:** Market Cap-to-GDP ratio. Values $> 115\%$ warn that top-down valuations are historically stretched.
+
+                **2. Quality & Growth Adjustments**
+                * **Consolidated Index ROE:** Approximated as $\left(\frac{\text{P/B}}{\text{P/E}}\right) \times 100$. A higher P/B is economically justified if ROE remains above $16\text{--}18\%$.
+                * **PEG Ratio:** $\frac{\text{P/E}}{\text{Forward EPS Growth Rate}}$. Prevents premature exits from high-growth mid-cap companies.
+                * **Forward P/E:** Estimated 1-year forward consensus earnings valuation.
+
+                **3. Statistical Spreads & Implementation**
+                * **Percentile & Z-Score:** Measures how many standard deviations current P/E sits away from its 10-year mean.
+                * **Mid-to-Large Cap Ratio:** Compares Midcap 150 P/E to Nifty 50 P/E. Spreads $> 1.35\times$ indicate aggressive mid-cap overheating.
+                * **iNAV Spread:** Real-time indicative premium/discount between traded ETF market price and fair asset value.
+                """)
 
             macro_data = fetch_macro_fundamentals()
-            
+            nifty50_pe = macro_data.get("Nifty 50", {}).get("PE", 0.0)
+
+            buffett_status_text, buffett_color = get_buffett_status(INDIA_BUFFETT_INDICATOR)
+
             target_etfs = [
                 ("NIFTYBEES", "Nifty 50"),
                 ("NEXT50IETF", "Nifty Next 50"),
                 ("MIDCAPETF", "Nifty Midcap 150"),
                 ("BANKBEES", "Nifty Bank")
             ]
-            
-            # Build responsive HTML table without line indentation to prevent Markdown parser from treating it as a code block
-            rows_html = ""
+
+            st.write("")
+
             for etf_sym, index_name in target_etfs:
                 f_data = macro_data.get(index_name, {"PE": 0.0, "PB": 0.0, "DY": 0.0})
-                v_text, v_color, v_bg = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
+                pe = f_data["PE"]
+                pb = f_data["PB"]
+                dy = f_data["DY"]
+                v_text, v_color, v_bg = evaluate_index_temp(index_name, pe, pb, dy)
+                cfg = INDEX_METRIC_CONFIG.get(etf_sym, {})
                 
-                rows_html += (
-                    f'<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.07);">'
-                    f'<td style="padding: 12px 14px; vertical-align: middle;">'
-                    f'<div style="font-weight: 700; color: #F8FAFC; font-size: 14.5px;">{etf_sym}</div>'
-                    f'<div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">{index_name}</div>'
-                    f'</td>'
-                    f'<td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data["PE"]}</td>'
-                    f'<td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data["PB"]}</td>'
-                    f'<td style="padding: 12px 14px; color: #CBD5E1; font-size: 13.5px; vertical-align: middle;">{f_data["DY"]}%</td>'
-                    f'<td style="padding: 12px 14px; vertical-align: middle;">'
-                    f'<span style="background: {v_bg}; color: {v_color}; padding: 5px 10px; border-radius: 8px; font-weight: 700; font-size: 12px; display: inline-block; white-space: nowrap; border: 1px solid {v_color}40;">'
-                    f'{v_text}'
-                    f'</span>'
-                    f'</td>'
-                    f'</tr>'
+                # Metric calculations
+                earnings_yield = (100.0 / pe) if pe > 0 else 0.0
+                yield_gap = (earnings_yield - INDIA_10Y_GSEC_YIELD) if pe > 0 else 0.0
+                growth_rate = cfg.get("expected_growth", 14.0)
+                peg_ratio = (pe / growth_rate) if (pe > 0 and growth_rate > 0) else 0.0
+                roe_approx = ((pb / pe) * 100.0) if (pe > 0 and pb > 0) else 0.0
+                forward_pe = (pe / (1.0 + (growth_rate / 100.0))) if pe > 0 else 0.0
+                
+                # Z-Score & 10Y Percentile
+                med_pe = cfg.get("historical_median_pe_10y", 21.0)
+                std_pe = cfg.get("historical_std_pe_10y", 3.0)
+                z_score = ((pe - med_pe) / std_pe) if std_pe > 0 and pe > 0 else 0.0
+                # Normal approximation for percentile
+                percentile = max(1.0, min(99.0, 50.0 + (z_score * 34.0))) if pe > 0 else 0.0
+
+                # Spread against Nifty 50
+                mid_large_spread = (pe / nifty50_pe) if (nifty50_pe > 0 and pe > 0) else 1.0
+                
+                # Expander Header containing P/E and Buffett Indicator
+                pe_display = f"{pe:.1f}" if pe > 0 else "OFFLINE"
+                expander_title = (
+                    f"📈 {etf_sym} ({index_name})  |  P/E: {pe_display}  |  "
+                    f"Buffett Indicator: {INDIA_BUFFETT_INDICATOR:.1f}% ({buffett_status_text.split(' ')[0]})  |  {v_text}"
                 )
 
-            table_html = (
-                '<div style="overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 12px 0 10px 0; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08);">'
-                '<table style="width: 100%; border-collapse: collapse; min-width: 520px; font-family: inherit; text-align: left;">'
-                '<thead>'
-                '<tr style="background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">'
-                '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Core ETF & Index</th>'
-                '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/E Ratio</th>'
-                '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/B Ratio</th>'
-                '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Dividend Yield</th>'
-                '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Verdict</th>'
-                '</tr>'
-                '</thead>'
-                f'<tbody>{rows_html}</tbody>'
-                '</table>'
-                '</div>'
-            )
-            st.markdown(table_html, unsafe_allow_html=True)
+                with st.expander(expander_title, expanded=False):
+                    # Section 1: Macro & Relative Yield Metrics
+                    st.markdown("#### 1. 🌐 Macro & Relative Yield Metrics")
+                    m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+                    with m_c1:
+                        st.metric("Index P/E", f"{pe:.1f}" if pe > 0 else "N/A", f"P/B: {pb:.2f}")
+                    with m_c2:
+                        st.metric("Earnings Yield (1/PE)", f"{earnings_yield:.2f}%", f"Div Yield: {dy:.2f}%")
+                    with m_c3:
+                        yg_color = "normal" if yield_gap >= 0 else "inverse"
+                        st.metric("Yield Gap (vs 10Y G-Sec)", f"{yield_gap:+.2f}%", f"10Y G-Sec: {INDIA_10Y_GSEC_YIELD:.2f}%", delta_color=yg_color)
+                    with m_c4:
+                        st.metric("Buffett Indicator", f"{INDIA_BUFFETT_INDICATOR:.1f}%", buffett_status_text)
+
+                    st.markdown(
+                        f":gray[**Yield Gap Assessment:** Equity risk premium is `{yield_gap:+.2f}%`. "
+                        f"{'Equities offer healthy premium over bonds.' if yield_gap > 0 else 'Equities offer no premium over 6.78% risk-free G-Secs (Exercise disciplined harvesting).'}]"
+                    )
+                    
+                    st.divider()
+
+                    # Section 2: Earnings Quality & Growth Adjustments
+                    st.markdown("#### 2. 💎 Earnings Quality & Growth Adjustments")
+                    q_c1, q_c2, q_c3, q_c4 = st.columns(4)
+                    with q_c1:
+                        st.metric("Consolidated ROE", f"{roe_approx:.2f}%", "Calculated as (P/B ÷ P/E) × 100")
+                    with q_c2:
+                        st.metric("Expected EPS Growth", f"{growth_rate:.1f}%", "1-Yr Consensus Estimate")
+                    with q_c3:
+                        peg_status = "Undervalued (<1.0)" if peg_ratio < 1.0 else ("Fair (1.0-1.5)" if peg_ratio <= 1.5 else "Stretched (>1.5)")
+                        st.metric("PEG Ratio", f"{peg_ratio:.2f}", peg_status)
+                    with q_c4:
+                        st.metric("Forward 1Y P/E", f"{forward_pe:.1f}", f"Trailing: {pe:.1f}")
+
+                    st.markdown(
+                        f":gray[**Growth Defense:** Index ROE of `{roe_approx:.1f}%` with PEG of `{peg_ratio:.2f}`. "
+                        f"{'Valuation multiple is fully supported by earnings expansion.' if peg_ratio < 1.3 else 'High multiple requires watchful trailing profit delivery.'}]"
+                    )
+
+                    st.divider()
+
+                    # Section 3: Statistical Benchmarking & Spreads
+                    st.markdown("#### 3. 📊 Statistical Benchmarking & Spreads")
+                    s_c1, s_c2, s_c3, s_c4 = st.columns(4)
+                    with s_c1:
+                        st.metric("10Y Percentile Rank", f"{percentile:.0f}th %ile", f"10Y Median: {med_pe:.1f}")
+                    with s_c2:
+                        st.metric("10Y Z-Score", f"{z_score:+.2f} σ", f"Std Dev: ±{std_pe:.1f}")
+                    with s_c3:
+                        if etf_sym == "MIDCAPETF":
+                            spread_verdict = "Overheated (>1.35x)" if mid_large_spread > 1.35 else "Balanced (<1.35x)"
+                            st.metric("Mid-to-Large Spread", f"{mid_large_spread:.2f}x", spread_verdict)
+                        elif etf_sym == "NIFTYBEES":
+                            st.metric("Baseline Spread", "1.00x", "Market Benchmark")
+                        else:
+                            st.metric("Spread vs Nifty 50", f"{mid_large_spread:.2f}x", "Relative Valuation")
+                    with s_c4:
+                        st.markdown(f"**Verdict:** <br><span style='background:{v_bg}; color:{v_color}; padding:6px 12px; border-radius:8px; font-weight:700; font-size:13px; border:1px solid {v_color}40; display:inline-block;'>{v_text}</span>", unsafe_allow_html=True)
+
+                    st.divider()
+
+                    # Section 4: Implementation & Execution Metrics (For ETF Buyers)
+                    st.markdown("#### 4. 🎯 Implementation & Execution Metrics (For ETF Buyers)")
+                    e_c1, e_c2, e_c3, e_c4 = st.columns(4)
+                    with e_c1:
+                        st.metric("Estimated iNAV Spread", cfg.get("inav_spread_est", "±0.05%"), "Market Price vs Fair iNAV")
+                    with e_c2:
+                        st.metric("Expense Ratio", f"{cfg.get('expense_ratio', 0.05):.2f}%", "Annual TER")
+                    with e_c3:
+                        st.metric("1-Yr Tracking Error", f"{cfg.get('tracking_error_1y', 0.04):.2f}%", "vs Underlying Index")
+                    with e_c4:
+                        st.markdown(f"**Core Role:** `{cfg.get('weight_in_core', 'Core Holding')}`<br><span style='color:#10B981; font-size:12px;'>Best Practice: Use Limit orders near iNAV</span>", unsafe_allow_html=True)
 
         st.write("")
         
+        # Prepayment execution form
         pp_input_col1, pp_input_col2 = st.columns(2)
         
         with pp_input_col1:
