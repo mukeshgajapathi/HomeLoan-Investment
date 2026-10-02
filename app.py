@@ -964,47 +964,45 @@ with tab_dashboard:
             ("BANKBEES", "Nifty Bank")
         ]
         
-        # Build responsive HTML table that preserves column alignment across all screen sizes
+        # Build responsive HTML table without line indentation to prevent Markdown parser from treating it as a code block
         rows_html = ""
         for etf_sym, index_name in target_etfs:
             f_data = macro_data.get(index_name, {"PE": 0.0, "PB": 0.0, "DY": 0.0})
             v_text, v_color, v_bg = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
             
-            rows_html += f"""
-            <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
-                <td style="padding: 12px 14px; vertical-align: middle;">
-                    <div style="font-weight: 700; color: #F8FAFC; font-size: 14.5px;">{etf_sym}</div>
-                    <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">{index_name}</div>
-                </td>
-                <td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data['PE']}</td>
-                <td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data['PB']}</td>
-                <td style="padding: 12px 14px; color: #CBD5E1; font-size: 13.5px; vertical-align: middle;">{f_data['DY']}%</td>
-                <td style="padding: 12px 14px; vertical-align: middle;">
-                    <span style="background: {v_bg}; color: {v_color}; padding: 5px 10px; border-radius: 8px; font-weight: 700; font-size: 12px; display: inline-block; white-space: nowrap; border: 1px solid {v_color}40;">
-                        {v_text}
-                    </span>
-                </td>
-            </tr>
-            """
+            rows_html += (
+                f'<tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.07);">'
+                f'<td style="padding: 12px 14px; vertical-align: middle;">'
+                f'<div style="font-weight: 700; color: #F8FAFC; font-size: 14.5px;">{etf_sym}</div>'
+                f'<div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">{index_name}</div>'
+                f'</td>'
+                f'<td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data["PE"]}</td>'
+                f'<td style="padding: 12px 14px; font-weight: 700; color: {v_color}; font-size: 14.5px; vertical-align: middle;">{f_data["PB"]}</td>'
+                f'<td style="padding: 12px 14px; color: #CBD5E1; font-size: 13.5px; vertical-align: middle;">{f_data["DY"]}%</td>'
+                f'<td style="padding: 12px 14px; vertical-align: middle;">'
+                f'<span style="background: {v_bg}; color: {v_color}; padding: 5px 10px; border-radius: 8px; font-weight: 700; font-size: 12px; display: inline-block; white-space: nowrap; border: 1px solid {v_color}40;">'
+                f'{v_text}'
+                f'</span>'
+                f'</td>'
+                f'</tr>'
+            )
 
-        table_html = f"""
-        <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 12px 0 20px 0; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08);">
-            <table style="width: 100%; border-collapse: collapse; min-width: 500px; font-family: inherit; text-align: left;">
-                <thead>
-                    <tr style="background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
-                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Core ETF & Index</th>
-                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/E Ratio</th>
-                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/B Ratio</th>
-                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Dividend Yield</th>
-                        <th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Verdict</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows_html}
-                </tbody>
-            </table>
-        </div>
-        """
+        table_html = (
+            '<div style="overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 12px 0 20px 0; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08);">'
+            '<table style="width: 100%; border-collapse: collapse; min-width: 520px; font-family: inherit; text-align: left;">'
+            '<thead>'
+            '<tr style="background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">'
+            '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Core ETF & Index</th>'
+            '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/E Ratio</th>'
+            '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">P/B Ratio</th>'
+            '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Dividend Yield</th>'
+            '<th style="padding: 10px 14px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Verdict</th>'
+            '</tr>'
+            '</thead>'
+            f'<tbody>{rows_html}</tbody>'
+            '</table>'
+            '</div>'
+        )
         st.markdown(table_html, unsafe_allow_html=True)
 
         st.write("")
