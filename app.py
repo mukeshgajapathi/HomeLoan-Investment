@@ -146,11 +146,12 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
 # --- AUTOMATED MACRO FUNDAMENTALS ENGINE ---
 @st.cache_data(ttl=3600)
 def fetch_macro_fundamentals():
+    # Strict 0.0 fallbacks so any connection or scraping failure is immediately obvious
     fundamentals = {
-        "Nifty 50": {"PE": 19.2, "PB": 2.75, "DY": 1.23},
-        "Nifty Next 50": {"PE": 18.2, "PB": 3.20, "DY": 1.04},
-        "Nifty Midcap 150": {"PE": 28.5, "PB": 4.10, "DY": 0.90},
-        "Nifty Bank": {"PE": 14.8, "PB": 2.10, "DY": 1.45}
+        "Nifty 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
+        "Nifty Next 50": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
+        "Nifty Midcap 150": {"PE": 0.0, "PB": 0.0, "DY": 0.0},
+        "Nifty Bank": {"PE": 0.0, "PB": 0.0, "DY": 0.0}
     }
     
     slug_map = {
@@ -187,6 +188,9 @@ def fetch_macro_fundamentals():
     return fundamentals
 
 def evaluate_index_temp(index_name, pe, pb, dy):
+    if pe <= 0.0 or pb <= 0.0:
+        return "⚠️ OFFLINE", "gray"
+        
     if index_name == "Nifty Bank":
         if pe > 21.0 or pb > 3.3: return "🌋 HARVEST", "red"
         elif pe > 18.0 or pb > 2.8: return "🔥 TRIM", "orange"
@@ -272,7 +276,7 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
                             "P&L (₹)": round(qty * (ltp - avg_price), 2)
                         })
         except ImportError:
-            st.error("⚠️️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            st.error("⚠ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
             return client_id, pd.DataFrame()
 
     elif fname.endswith('.CSV'):
@@ -553,7 +557,7 @@ with tab_aim:
     st.markdown("""
 <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
 <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🌟 My Definite Chief Aim in Life</h2>
-<p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"My definite chief aim in life is to <b>feel good now</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."</p>
+<p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."</p>
 <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
 <div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
 <p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">"In return for the harmonious and abundant life I desire, I commit to the following principles of creative action, knowing that true wealth is built upon truth, justice, and mutual benefit."</p>
@@ -946,7 +950,8 @@ with tab_dashboard:
             with st.popover("ℹ️ View Valuation Logic"):
                 st.markdown("**1. Price-to-Earnings (P/E) Ratio**\nThe ultimate barometer of market sentiment (Fear vs. Greed).\n* **< 20 (Fear):** Cheap. Accumulate units.\n* **20–24 (Fair):** Normal market conditions.\n* **> 24 (Euphoria):** Overvalued. Optimal time to harvest profits.\n\n**2. Price-to-Book (P/B) Ratio**\nCompares price to actual net assets. Crucial for Banking ETFs.\n* **< 2.5 (Cheap):** Buying assets at a steep discount.\n* **2.5–3.5 (Fair):** Reasonably priced.\n* **> 3.5 (Bubble):** Flashing red warning to shift capital to debt reduction.\n\n**3. Dividend Yield**\n* **> 1.5% (High Yield):** Signals deep undervaluation.\n* **< 1.0% (Low Yield):** When market prices skyrocket in a bubble, the yield mathematically shrinks. A flashing red light to harvest capital.")
 
-        c_hdr1, c_hdr2, c_hdr3, c_hdr4 = st.columns([2, 1, 1, 2])
+        # Clean 5-column layout: Dividend Yield and Verdict separated
+        c_hdr1, c_hdr2, c_hdr3, c_hdr4, c_hdr5 = st.columns([2, 1, 1, 1, 1.4])
         with c_hdr1:
             st.markdown("**Core ETF & Index**")
         with c_hdr2:
@@ -954,7 +959,9 @@ with tab_dashboard:
         with c_hdr3:
             st.markdown("**P/B Ratio**")
         with c_hdr4:
-            st.markdown("**Dividend Yield & Verdict**")
+            st.markdown("**Dividend Yield**")
+        with c_hdr5:
+            st.markdown("**Verdict**")
 
         st.divider()
         
@@ -968,10 +975,10 @@ with tab_dashboard:
         ]
         
         for etf_sym, index_name in target_etfs:
-            f_data = macro_data.get(index_name, {"PE": 0, "PB": 0, "DY": 0})
+            f_data = macro_data.get(index_name, {"PE": 0.0, "PB": 0.0, "DY": 0.0})
             v_text, v_color = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
             
-            ec1, ec2, ec3, ec4 = st.columns([2, 1, 1, 2])
+            ec1, ec2, ec3, ec4, ec5 = st.columns([2, 1, 1, 1, 1.4])
             with ec1:
                 st.markdown(f"**{etf_sym}**\n\n:gray[{index_name}]")
             with ec2:
@@ -979,7 +986,9 @@ with tab_dashboard:
             with ec3:
                 st.markdown(f":{v_color}[**{f_data['PB']}**]")
             with ec4:
-                st.markdown(f"{f_data['DY']}%  |  :{v_color}[**{v_text}**]")
+                st.markdown(f"{f_data['DY']}%")
+            with ec5:
+                st.markdown(f":{v_color}[**{v_text}**]")
             
             st.divider()
 
