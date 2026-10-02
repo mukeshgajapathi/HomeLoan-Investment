@@ -1122,14 +1122,24 @@ with tab_dashboard:
             buffett_display = f"{live_buffett_ind:.1f}%" if live_buffett_ind > 0 else "OFFLINE"
             gsec_display = f"{live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "OFFLINE"
 
-            # Top-level single placement of nationwide macro metrics
+            # Top-level single placement of nationwide macro metrics with insightful tooltips
             macro_top_c1, macro_top_c2, macro_top_c3 = st.columns([1.5, 1.5, 1])
             with macro_top_c1:
-                st.metric("🇮🇳 Buffett Indicator (Market Cap-to-GDP)", buffett_display, buffett_status_text)
+                st.metric(
+                    "🇮🇳 Buffett Indicator (Market Cap-to-GDP)", 
+                    buffett_display, 
+                    buffett_status_text,
+                    help="💡 What It Means:\nCompares the total valuation of all listed Indian companies against the nation's nominal GDP.\n\n👑 Rule of Thumb (Warren Buffett):\n• < 75%: Deep Value (Historical bargain zone)\n• 75%–95%: Fair Value\n• 95%–115%: Modestly Overvalued\n• > 115%: Frothy / Stretched ('Playing with fire'). Prudent time to harvest profits for debt clearance."
+                )
             with macro_top_c2:
-                st.metric("🏛️ 10Y Sovereign G-Sec Yield", gsec_display, "Risk-Free Benchmark")
+                st.metric(
+                    "🏛️ 10Y Sovereign G-Sec Yield", 
+                    gsec_display, 
+                    "Risk-Free Benchmark",
+                    help="💡 What It Means:\nThe annualized return guaranteed by the Government of India on its 10-year bonds. It serves as the risk-free benchmark hurdle rate.\n\n👑 Rule of Thumb (Warren Buffett & Benjamin Graham):\nStocks carry volatility and business risk. Therefore, equities must provide a meaningful profit premium above the 10Y G-Sec yield to justify investing. When safe G-Sec yields exceed equity yields, paying down debt becomes mathematically superior."
+                )
             with macro_top_c3:
-                with st.popover("ℹ️️ View Institutional Methodology"):
+                with st.popover("ℹ View Institutional Methodology"):
                     st.markdown(r"""
                     ### 📐 Institutional Evaluation Framework
 
@@ -1172,40 +1182,113 @@ with tab_dashboard:
 
                 with st.expander(expander_title, expanded=False):
                     # Section 1: Macro & Relative Yield Metrics with dedicated P/B Card
-                    st.markdown("#### 🌐 Macro & Relative Yield Metrics")
+                    st.markdown("#### 1. 🌐 Macro & Relative Yield Metrics")
                     m_c1, m_c2, m_c3, m_c4 = st.columns(4)
                     with m_c1:
                         pe_subtext = "Historical Avg ~18.0" if index_name == "Nifty Bank" else "Historical Avg ~20.0"
-                        st.metric("Index P/E", f"{pe:.1f}" if pe > 0 else "N/A", pe_subtext)
+                        pe_help = (
+                            "💡 What It Means:\n"
+                            "Price-to-Earnings Ratio. Measures how many rupees you pay for every ₹1 of company net profit.\n\n"
+                            "👑 Rule of Thumb (Benjamin Graham & Peter Lynch):\n"
+                            "• Nifty Bank: < 15 Accumulate, 15–18 Fair, > 21 Euphoric/Harvest.\n"
+                            "• Nifty 50 / Next 50: < 20 Accumulate, 20–24 Fair, > 25 Overvalued.\n"
+                            "• Midcap 150: < 22 Accumulate, 22–26 Fair, > 30 Stretched."
+                        )
+                        st.metric("Index P/E", f"{pe:.1f}" if pe > 0 else "N/A", pe_subtext, help=pe_help)
                     with m_c2:
                         pb_subtext = "10Y Avg: 2.65" if index_name == "Nifty Bank" else "Fair Value < 3.0"
-                        st.metric("Index P/B", f"{pb:.2f}" if pb > 0 else "N/A", pb_subtext)
+                        pb_help = (
+                            "💡 What It Means:\n"
+                            "Price-to-Book Ratio. Compares the market price to the company's balance-sheet net worth. Essential for banking stocks because banks hold money/loans as assets.\n\n"
+                            "👑 Rule of Thumb (Benjamin Graham):\n"
+                            "• Banking Index: 10Y median is ~2.65. Below 2.2 is a major accumulation bargain; above 3.3 indicates a banking bubble.\n"
+                            "• Broad Indices: Under 3.0 is reasonable; above 4.0 requires exceptionally high ROE (>18%) to be justified."
+                        )
+                        st.metric("Index P/B", f"{pb:.2f}" if pb > 0 else "N/A", pb_subtext, help=pb_help)
                     with m_c3:
-                        st.metric("Earnings Yield (1/PE)", f"{earnings_yield:.2f}%" if earnings_yield > 0 else "N/A", f"Div Yield: {dy:.2f}%" if dy > 0 else "N/A")
+                        ey_help = (
+                            "💡 What It Means:\n"
+                            "The annual profit percentage earned per rupee invested (calculated as 1 ÷ P/E × 100). It is the true operational yield of the business before dividend retention.\n\n"
+                            "👑 Rule of Thumb (Joel Greenblatt & Warren Buffett):\n"
+                            "Higher is better. A 5.5% earnings yield means companies earn ₹5.50 annually on every ₹100 of index value. Compare this directly with sovereign bond yields."
+                        )
+                        st.metric(
+                            "Earnings Yield (1/PE)", 
+                            f"{earnings_yield:.2f}%" if earnings_yield > 0 else "N/A", 
+                            f"Div Yield: {dy:.2f}%" if dy > 0 else "N/A",
+                            help=ey_help
+                        )
                     with m_c4:
                         yg_color = "normal" if yield_gap >= 0 else "inverse"
                         yg_display = f"{yield_gap:+.2f}%" if (pe > 0 and live_gsec_yield > 0) else "N/A"
                         gsec_subtext = f"10Y G-Sec: {live_gsec_yield:.2f}%" if live_gsec_yield > 0 else "10Y G-Sec: OFFLINE"
-                        st.metric("Yield Gap (vs 10Y G-Sec)", yg_display, gsec_subtext, delta_color=yg_color)
+                        yg_help = (
+                            "💡 What It Means:\n"
+                            "Equity Risk Premium. Measures (Earnings Yield - 10Y Sovereign G-Sec Yield). It answers: 'Are equities paying me enough extra return over 100% risk-free government bonds?'\n\n"
+                            "👑 Rule of Thumb (Institutional Allocators):\n"
+                            "• Positive (> 0%): Equities pay a healthy premium over bonds. Strong buy/hold incentive.\n"
+                            "• Negative (< 0%): Bond yields beat stock earnings yields. Equities offer no risk premium. Perfect mathematical justification to harvest stock gains and prepay high-interest debt."
+                        )
+                        st.metric("Yield Gap (vs 10Y G-Sec)", yg_display, gsec_subtext, delta_color=yg_color, help=yg_help)
+
+                    if pe > 0 and live_gsec_yield > 0:
+                        assessment_msg = "Equities offer healthy premium over bonds." if yield_gap > 0 else f"Equities offer no premium over {live_gsec_yield:.2f}% risk-free G-Secs (Exercise disciplined harvesting)."
+                        st.markdown(f":gray[**Yield Gap Assessment:** Equity risk premium is `{yield_gap:+.2f}%`. {assessment_msg}]")
+                    else:
+                        st.markdown(":gray[**Yield Gap Assessment:** ⚠️ Live bond or equity multiple feed offline. Calculations paused.]")
                     
                     st.divider()
 
                     # Section 2: Earnings Quality & Growth Adjustments
-                    st.markdown("#### 💎 Earnings Quality & Growth Adjustments")
+                    st.markdown("#### 2. 💎 Earnings Quality & Growth Adjustments")
                     q_c1, q_c2, q_c3, q_c4 = st.columns(4)
                     with q_c1:
-                        st.metric("Consolidated ROE", f"{roe_approx:.2f}%" if roe_approx > 0 else "N/A", "Calculated as (P/B ÷ P/E) × 100")
+                        roe_help = (
+                            "💡 What It Means:\n"
+                            "Consolidated Return on Equity ((P/B ÷ P/E) × 100). Shows how efficiently companies convert shareholder capital into net profit.\n\n"
+                            "👑 Rule of Thumb (Charlie Munger & Warren Buffett):\n"
+                            "• < 12%: Poor capital efficiency.\n"
+                            "• 15%–18%: High-quality businesses with durable competitive advantages (moats).\n"
+                            "• > 20%: Elite wealth compounders. High P/B ratios are completely justified when ROE remains this strong."
+                        )
+                        st.metric("Consolidated ROE", f"{roe_approx:.2f}%" if roe_approx > 0 else "N/A", "Calculated as (P/B ÷ P/E) × 100", help=roe_help)
                     with q_c2:
                         growth_display = f"{growth_rate:.1f}%" if growth_rate > 0 else "OFFLINE"
-                        st.metric("Index Earnings Growth", growth_display, "Live Long-Term Index CAGR")
+                        growth_help = (
+                            "💡 What It Means:\n"
+                            "The long-term compounded annual profit growth rate (EPS CAGR) of the underlying companies in this index.\n\n"
+                            "👑 Rule of Thumb (Peter Lynch):\n"
+                            "Earnings growth is the fundamental engine that powers stock prices over time. Double-digit growth (> 12%) supports higher valuations."
+                        )
+                        st.metric("Index Earnings Growth", growth_display, "Live Long-Term Index CAGR", help=growth_help)
                     with q_c3:
+                        peg_help = (
+                            "💡 What It Means:\n"
+                            "Price/Earnings-to-Growth Ratio (Index P/E ÷ Earnings Growth Rate). Evaluates whether you are overpaying for growth.\n\n"
+                            "👑 Rule of Thumb (Peter Lynch):\n"
+                            "• < 1.0: Outstanding bargain. Growth is selling at a steep discount.\n"
+                            "• 1.0–1.5: Fair price for growth.\n"
+                            "• > 1.5: Stretched. High multiples require flawless profit delivery. Any slowdown can trigger sharp pullbacks."
+                        )
                         if peg_ratio > 0:
                             peg_status = "Undervalued (<1.0)" if peg_ratio < 1.0 else ("Fair (1.0-1.5)" if peg_ratio <= 1.5 else "Stretched (>1.5)")
-                            st.metric("PEG Ratio", f"{peg_ratio:.2f}", peg_status)
+                            st.metric("PEG Ratio", f"{peg_ratio:.2f}", peg_status, help=peg_help)
                         else:
-                            st.metric("PEG Ratio", "N/A", "Requires Live CAGR")
+                            st.metric("PEG Ratio", "N/A", "Requires Live CAGR", help=peg_help)
                     with q_c4:
-                        st.metric("Forward 1Y P/E", f"{forward_pe:.1f}" if forward_pe > 0 else "N/A", f"Trailing: {pe:.1f}" if pe > 0 else "N/A")
+                        fwd_help = (
+                            "💡 What It Means:\n"
+                            "Price-to-Earnings multiple based on expected earnings over the upcoming 12 months rather than past historical profits.\n\n"
+                            "👑 Rule of Thumb (Institutional Fund Managers):\n"
+                            "If Forward P/E is notably lower than Trailing P/E, corporate profits are accelerating, meaning the index is cheaper than past multiples suggest."
+                        )
+                        st.metric("Forward 1Y P/E", f"{forward_pe:.1f}" if forward_pe > 0 else "N/A", f"Trailing: {pe:.1f}" if pe > 0 else "N/A", help=fwd_help)
+
+                    if peg_ratio > 0:
+                        defense_msg = "Valuation multiple is fully supported by earnings expansion." if peg_ratio < 1.3 else "High multiple requires watchful trailing profit delivery."
+                        st.markdown(f":gray[**Growth Defense:** Index ROE of `{roe_approx:.1f}%` with PEG of `{peg_ratio:.2f}`. {defense_msg}]")
+                    else:
+                        st.markdown(f":gray[**Growth Defense:** Index ROE is `{roe_approx:.1f}%`. Quantitative PEG awaiting live index CAGR.]")
 
         st.write("")
         
