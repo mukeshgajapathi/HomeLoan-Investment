@@ -1172,7 +1172,7 @@ with tab_dashboard:
 
                 with st.expander(expander_title, expanded=False):
                     # Section 1: Macro & Relative Yield Metrics with dedicated P/B Card
-                    st.markdown("#### 1. 🌐 Macro & Relative Yield Metrics")
+                    st.markdown("#### 🌐 Macro & Relative Yield Metrics")
                     m_c1, m_c2, m_c3, m_c4 = st.columns(4)
                     with m_c1:
                         pe_subtext = "Historical Avg ~18.0" if index_name == "Nifty Bank" else "Historical Avg ~20.0"
@@ -1197,7 +1197,7 @@ with tab_dashboard:
                     st.divider()
 
                     # Section 2: Earnings Quality & Growth Adjustments
-                    st.markdown("#### 2. 💎 Earnings Quality & Growth Adjustments")
+                    st.markdown("#### 💎 Earnings Quality & Growth Adjustments")
                     q_c1, q_c2, q_c3, q_c4 = st.columns(4)
                     with q_c1:
                         st.metric("Consolidated ROE", f"{roe_approx:.2f}%" if roe_approx > 0 else "N/A", "Calculated as (P/B ÷ P/E) × 100")
