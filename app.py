@@ -84,11 +84,13 @@ TICKER_MAP = {
     "HDFCNIFETF": "HDFCNIFETF.NS",
     "JUNIORBEES": "JUNIORBEES.NS",
     "NEXT50": "NEXT50.NS",
+    "NEXT50IETF": "NEXT50IETF.NS",
     "GOLDBEES": "GOLDBEES.NS",
     "LIQUIDBEES": "LIQUIDBEES.NS",
     "LIQUIDCASE": "LIQUIDCASE.NS",
     "AUTOBEES": "AUTOBEES.NS",
     "BANKETF": "BANKETF.NS",
+    "BANKBEES": "BANKBEES.NS",
     "ITBEES": "ITBEES.NS",
     "PHARMABEES": "PHARMABEES.NS",
     "FMCGIETF": "FMCGIETF.NS",
@@ -140,35 +142,51 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
     except Exception:
         pass
     return default_nav
-@st.cache_data(ttl=86400)
+
+# --- AUTOMATED MACRO FUNDAMENTALS ENGINE ---
+@st.cache_data(ttl=3600)
 def fetch_macro_fundamentals():
-    """
-    Provides institutional fundamental metrics. Includes a graceful fallback 
-    so the app NEVER crashes if NSE servers block the cloud request.
-    """
     fundamentals = {
-        "Nifty 50": {"PE": 22.8, "PB": 3.9, "DY": 1.18},
-        "Nifty Next 50": {"PE": 26.5, "PB": 4.5, "DY": 1.05},
-        "Nifty Midcap 150": {"PE": 31.2, "PB": 4.8, "DY": 0.85},
-        "Nifty Bank": {"PE": 15.8, "PB": 2.4, "DY": 1.45}
+        "Nifty 50": {"PE": 19.2, "PB": 2.75, "DY": 1.23},
+        "Nifty Next 50": {"PE": 18.2, "PB": 3.20, "DY": 1.04},
+        "Nifty Midcap 150": {"PE": 28.5, "PB": 4.10, "DY": 0.90},
+        "Nifty Bank": {"PE": 14.8, "PB": 2.10, "DY": 1.45}
+    }
+    
+    slug_map = {
+        "Nifty 50": "NIFTY",
+        "Nifty Next 50": "NIFTYJR",
+        "Nifty Midcap 150": "NIFTYMIDCAP150",
+        "Nifty Bank": "BANKNIFTY"
     }
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
     }
-    try:
-        session = requests.Session()
-        session.get("https://www.nseindia.com", headers=headers, timeout=5)
-        # Note: NSE actively blocks cloud servers like AWS/Streamlit. 
-        # We rely on the highly accurate static proxy values above to ensure 100% uptime.
-    except Exception:
-        pass
-        
+    
+    for idx_name, slug in slug_map.items():
+        try:
+            url = f"https://www.screener.in/company/{slug}/"
+            resp = requests.get(url, headers=headers, timeout=4)
+            if resp.status_code == 200:
+                html = resp.text
+                pe_match = re.search(r'P/E\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                pb_match = re.search(r'Price to Book value\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                dy_match = re.search(r'Dividend Yield\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
+                
+                if pe_match:
+                    fundamentals[idx_name]["PE"] = float(pe_match.group(1))
+                if pb_match:
+                    fundamentals[idx_name]["PB"] = float(pb_match.group(1))
+                if dy_match:
+                    fundamentals[idx_name]["DY"] = float(dy_match.group(1))
+        except Exception:
+            pass 
+            
     return fundamentals
 
 def evaluate_index_temp(index_name, pe, pb, dy):
-    # Returns native Streamlit color names (red, orange, green, blue)
     if index_name == "Nifty Bank":
         if pe > 21.0 or pb > 3.3: return "🌋 HARVEST", "red"
         elif pe > 18.0 or pb > 2.8: return "🔥 TRIM", "orange"
@@ -179,12 +197,12 @@ def evaluate_index_temp(index_name, pe, pb, dy):
         elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "orange"
         elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "green"
         else: return "❄️ ACCUMULATE", "blue"
-    else: # Nifty 50 and Nifty Next 50
+    else: 
         if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "red"
         elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "orange"
         elif pe > 21.0 or pb > 3.0: return "☀️ HOLD", "green"
         else: return "❄️ ACCUMULATE", "blue"
-            
+
 # --- UNIVERSAL HOLDINGS PARSER ---
 def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_id=None):
     file_name_str = filename if filename else getattr(uploaded_file, 'name', str(uploaded_file))
@@ -254,7 +272,7 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
                             "P&L (₹)": round(qty * (ltp - avg_price), 2)
                         })
         except ImportError:
-            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            st.error("⚠️️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
             return client_id, pd.DataFrame()
 
     elif fname.endswith('.CSV'):
@@ -428,7 +446,6 @@ df_portfolio_raw, df_loan, disbursed_ratio, is_handover_completed, current_inter
 # Process Holdings Data
 eq_rows = []
 mf_rows = []
-user_held_etfs = set()
 
 if not df_portfolio_raw.empty:
     for _, row in df_portfolio_raw.iterrows():
@@ -460,7 +477,6 @@ if not df_portfolio_raw.empty:
             })
         else:
             ticker = TICKER_MAP.get(sym, f"{sym}.NS")
-            user_held_etfs.add(sym.upper())
             ltp = fetch_live_ltp(ticker, default_price=last_ltp)
             curr_val = units * ltp
             pnl = curr_val - (units * avg_cost)
@@ -489,13 +505,11 @@ mf_val = df_mf_active["Current_Value"].sum() if not df_mf_active.empty else 0.0
 mf_inv = df_mf_active["Invested_Value"].sum() if not df_mf_active.empty else 0.0
 mf_pnl = df_mf_active["P&L (₹)"].sum() if not df_mf_active.empty else 0.0
 
-# Overall Portfolio integrates ALL assets
 total_portfolio_val = eq_val + mf_val
 total_portfolio_invested = eq_inv + mf_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
-# Loan calculations
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
     df_loan, INITIAL_LOAN, current_interest_rate
 )
@@ -536,11 +550,10 @@ st.title("🏡 Home Loan & 📈 Investment Tracker")
 tab_aim, tab_dashboard = st.tabs(["✨ Definite Chief Aim", "📊 Loan & Investment Dashboard"])
 
 with tab_aim:
-    # --- HERO CARD 1: DEFINITE CHIEF AIM IN LIFE ---
     st.markdown("""
 <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
 <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🌟 My Definite Chief Aim in Life</h2>
-<p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"My definite chief aim in life is to <b>feel good</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."</p>
+<p style="color: #F8FAFC; font-size: 19px; text-align: center; font-weight: 500; font-style: italic; line-height: 1.7; margin-bottom: 22px; max-width: 900px; margin-left: auto; margin-right: auto;">"My definite chief aim in life is to <b>feel good now</b>. I live a <b>HAPPY, HEALTHY AND WEALTHY</b> life fully supporting my family as a loving husband, friendly father, and joyful grandparent."</p>
 <hr style="border: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent); margin: 20px 0;">
 <div style="background: rgba(255, 255, 255, 0.04); padding: 24px; border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
 <p style="color: #A5B4FC; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 20px; font-style: italic;">"In return for the harmonious and abundant life I desire, I commit to the following principles of creative action, knowing that true wealth is built upon truth, justice, and mutual benefit."</p>
@@ -575,7 +588,6 @@ with tab_aim:
 </div>
 """, unsafe_allow_html=True)
 
-    # --- HERO CARD 2: NAPOLEON HILL'S 5-STEP SELF-CONFIDENCE FORMULA ---
     st.markdown("""
 <div style="background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 50%, #1E293B 100%); padding: 26px; border-radius: 18px; border: 1.5px solid #818CF8; box-shadow: 0 10px 30px rgba(129, 140, 248, 0.12); margin-bottom: 25px;">
 <h2 style="color: #A5B4FC; text-align: center; font-size: 24px; font-weight: 800; margin-bottom: 16px; letter-spacing: 0.5px;">💪 Napoleon Hill's 5-Step Self-Confidence Formula</h2>
@@ -604,23 +616,17 @@ with tab_aim:
 </div>
 """, unsafe_allow_html=True)
 
-    # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB (ALIGNED GOAL STATE) ---
     with st.container(border=True):
-        st.markdown("<h3 style='margin-bottom: 0px;'>🎯 Net-Debt-Zero Visualizer</h3>", unsafe_allow_html=True)
-        
+        st.subheader("🎯 Net-Debt-Zero Visualizer")
         st.progress(1.0)
         st.caption("✨ **100.0% Covered** towards Net-Debt-Zero target | **Goal Fully Manifested**")
-        
         st.success("🎉 **Net-Debt-Zero Fully Achieved:** Living in total financial freedom, peace of mind, and complete abundance!")
-        
         st.divider()
-        
         s_col1, s_col2 = st.columns(2)
         s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
         s_col2.metric("Portfolio Value", "₹1,00,00,000", "1 Cr - Total Financial Abundance")
 
 with tab_dashboard:
-    # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB (CURRENT REALITY) ---
     with st.container(border=True):
         st.subheader("🎯 Net-Debt-Zero Visualizer")
         net_debt = max(0.0, current_principal - total_portfolio_val)
@@ -662,7 +668,8 @@ with tab_dashboard:
     with m_col1:
         c1_text, c1_btn = st.columns([5, 1])
         with c1_text:
-            st.markdown(f"**{active_due_label}**<br>{format_inr(active_due_amount)}<br><span style='color:#00CC96; font-size:13.5px;'>{disbursement_badge}</span>", unsafe_allow_html=True)
+            disb_color = "green" if is_handover else "blue"
+            st.markdown(f"**{active_due_label}**\n\n{format_inr(active_due_amount)}\n\n:{disb_color}[{disbursement_badge}]")
         
         if not is_handover:
             with c1_btn:
@@ -686,7 +693,7 @@ with tab_dashboard:
                     
                     can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
                     
-                    if st.button("💾 Save Disbursement Settings", disabled=not can_save, type="primary"):
+                    if st.button("💾 Save Settings", disabled=not can_save, type="primary"):
                         updated_settings = pd.DataFrame([{
                             "Disbursed_Ratio": new_ratio,
                             "Handover_Completed": (new_ratio == 1.0),
@@ -700,7 +707,7 @@ with tab_dashboard:
     with m_col2:
         c2_text, c2_btn = st.columns([5, 1])
         with c2_text:
-            st.markdown(f"**Interest Rate**<br>{current_interest_rate}%<br><span style='color:#808495; font-size:13.5px;'>Floating Rate</span>", unsafe_allow_html=True)
+            st.markdown(f"**Interest Rate**\n\n{current_interest_rate}%\n\n:gray[Floating Rate]")
         with c2_btn:
             with st.popover("✏️", help="Update Interest Rate"):
                 st.markdown("### 🏦 Update Interest Rate")
@@ -710,7 +717,7 @@ with tab_dashboard:
                     step=0.05, 
                     format="%.2f"
                 )
-                if st.button("💾 Save New Rate", type="primary"):
+                if st.button("💾 Save Rate", type="primary"):
                     updated_settings = pd.DataFrame([{
                         "Disbursed_Ratio": disbursed_ratio,
                         "Handover_Completed": is_handover_completed,
@@ -722,7 +729,7 @@ with tab_dashboard:
                     st.rerun()
 
     with m_col3:
-        st.markdown(f"**Current Tenure Remaining**<br>{rem_years:.1f} Yrs<br><span style='color:#808495; font-size:13.5px;'>{int(current_rem_months)} Mos left</span>", unsafe_allow_html=True)
+        st.markdown(f"**Current Tenure Remaining**\n\n{rem_years:.1f} Yrs\n\n:gray[{int(current_rem_months)} Mos left]")
 
     current_month_str = datetime.now().strftime("%b %Y")
 
@@ -743,9 +750,9 @@ with tab_dashboard:
         with c3:
             st.markdown("**Payment Status**")
             if is_current_month_paid:
-                st.markdown("<span style='color:#00CC96; font-weight:bold; font-size:18px;'>🟢 PAID</span>", unsafe_allow_html=True)
+                st.markdown(":green[**🟢 PAID**]")
             else:
-                st.markdown("<span style='color:#FF4B4B; font-weight:bold; font-size:18px;'>🔴 UNPAID</span>", unsafe_allow_html=True)
+                st.markdown(":red[**🔴 UNPAID**]")
 
         if st.form_submit_button("Log Monthly Payment", disabled=is_current_month_paid):
             new_row_emi = pd.DataFrame([{
@@ -764,7 +771,6 @@ with tab_dashboard:
     if is_current_month_paid:
         st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
 
-    # Principal Cleared Visualizer Card
     with st.container(border=True):
         pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
         st.markdown(f"**📉 Principal Cleared Tracker** ({pct_loan_cleared * 100:.2f}% of Initial Loan Paid)")
@@ -777,7 +783,7 @@ with tab_dashboard:
 
     st.divider()
 
-    # --- SECTION 2: LIVE PORTFOLIO HOLDINGS & ACTION HEADER ---
+    # --- SECTION 2: LIVE PORTFOLIO HOLDINGS ---
     sec2_hdr_col, sec2_act_col = st.columns([3, 1])
 
     with sec2_hdr_col:
@@ -792,7 +798,7 @@ with tab_dashboard:
                 type=["csv", "xlsx", "xls"], 
                 accept_multiple_files=True,
                 key="holdings_uploader",
-                help="Upload multiple files at once (e.g. holdings-HEK312.csv, holdings-SDB789.xlsx)."
+                help="Upload multiple files at once."
             )
 
             account_mapping = {}
@@ -821,7 +827,7 @@ with tab_dashboard:
                     user_acc = st.text_input(
                         f"Account ID for `{file.name}`:",
                         value=detected_acc,
-                        placeholder="e.g. HEK312 or SDB789 (Mandatory)",
+                        placeholder="e.g. HEK312 (Mandatory)",
                         key=f"acc_input_{file.name}"
                     )
                     account_mapping[file.name] = user_acc.strip().upper()
@@ -830,21 +836,18 @@ with tab_dashboard:
             input_xirr = st.number_input(
                 "Console Overall XIRR (%)", 
                 value=None,
-                min_value=-100.0, 
-                max_value=500.0, 
-                step=0.1,
-                placeholder="e.g. 14.5 or -2.5 (Mandatory)",
-                help="Enter overall portfolio XIRR % from Zerodha Console. Negative, zero, and positive values are allowed."
+                min_value=-100.0, max_value=500.0, step=0.1,
+                placeholder="e.g. 14.5 (Mandatory)"
             )
 
-            if st.button("Sync Holdings & XIRR to Google Sheets", key="btn_sync_holdings"):
+            if st.button("Sync Holdings to Sheets", key="btn_sync_holdings"):
                 missing_accounts = [fname for fname, acc in account_mapping.items() if not acc]
                 if input_xirr is None:
-                    st.error("⚠️ Overall Console XIRR (%) is mandatory. Please enter your XIRR percentage before syncing.")
+                    st.error("⚠️ Overall Console XIRR (%) is mandatory.")
                 elif not uploaded_files:
-                    st.error("⚠️ Please select at least one holdings CSV or Excel file to upload.")
+                    st.error("⚠️ Please select at least one holdings file.")
                 elif missing_accounts:
-                    st.error(f"⚠️ Please specify an Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
+                    st.error(f"⚠ Specify Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
                 else:
                     parsed_records = []
                     for file in uploaded_files:
@@ -852,7 +855,7 @@ with tab_dashboard:
                         cid, df_parsed = parse_zerodha_holdings_file(file, file.name, override_account_id=target_acc)
                         if not df_parsed.empty:
                             parsed_records.append(df_parsed)
-                            st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}** from `{file.name}`")
+                            st.info(f"Loaded **{len(df_parsed)} active holdings** for account **{cid}**")
 
                     if parsed_records:
                         df_new_combined = pd.concat(parsed_records, ignore_index=True)
@@ -868,24 +871,12 @@ with tab_dashboard:
                             df_retained = pd.DataFrame()
 
                         df_all_merged = pd.concat([df_retained, df_new_combined], ignore_index=True)
+                        df_all_merged["acc_asset_key"] = [f"{safe_str(r.get('account','')).upper()}_{safe_str(r.get('isin','')).upper() if safe_str(r.get('isin','')) not in ['','NAN'] else safe_str(r.get('symbol','')).upper()}" for _, r in df_all_merged.iterrows()]
 
-                        keys = []
-                        for _, row in df_all_merged.iterrows():
-                            acc = safe_str(row.get('account', '')).upper()
-                            isin = safe_str(row.get('isin', '')).upper()
-                            sym = safe_str(row.get('symbol', '')).upper()
-                            asset_id = isin if (isin and isin != "NAN") else sym
-                            keys.append(f"{acc}_{asset_id}")
-
-                        df_all_merged["acc_asset_key"] = keys
-
-                        df_deduped_holdings = df_all_merged.drop_duplicates(subset=["acc_asset_key"], keep="last").drop(columns=["acc_asset_key"]).reset_index(drop=True)
-                        df_deduped_holdings = df_deduped_holdings.fillna("")
+                        df_deduped_holdings = df_all_merged.drop_duplicates(subset=["acc_asset_key"], keep="last").drop(columns=["acc_asset_key"]).reset_index(drop=True).fillna("")
 
                         try:
                             conn.update(worksheet="Portfolio_Tracker", data=df_deduped_holdings)
-                            
-                            # Save XIRR to Loan_Settings
                             try:
                                 df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
                                 if df_settings.empty:
@@ -895,16 +886,13 @@ with tab_dashboard:
                                     conn.update(worksheet="Loan_Settings", data=df_settings)
                             except Exception:
                                 pass
-
                             st.success("🎉 Successfully synced active holdings and Console XIRR!")
                             st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
                             st.error(f"Failed to update Google Sheets: {e}")
 
-    # Section 2 UI: Clean Metric Cards (Dynamically hidden if 0)
     st.markdown("<br>", unsafe_allow_html=True)
-    
     active_cards = []
     if eq_inv > 0 or eq_val > 0: active_cards.append('equity')
     if mf_inv > 0 or mf_val > 0: active_cards.append('mf')
@@ -912,7 +900,6 @@ with tab_dashboard:
     if active_cards:
         cols = st.columns(len(active_cards))
         col_idx = 0
-        
         if 'equity' in active_cards:
             with cols[col_idx]:
                 with st.container(border=True):
@@ -920,9 +907,8 @@ with tab_dashboard:
                     st.caption("Standard Wealth Portfolio")
                     eq_pnl_pct = (eq_pnl / eq_inv * 100) if eq_inv > 0 else 0.0
                     st.metric("Current Value", format_inr(eq_val), f"{format_inr(eq_pnl)} ({eq_pnl_pct:+.2f}%)")
-                    st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(eq_inv)}</span>", unsafe_allow_html=True)
+                    st.markdown(f":gray[Invested: {format_inr(eq_inv)}]")
             col_idx += 1
-            
         if 'mf' in active_cards:
             with cols[col_idx]:
                 with st.container(border=True):
@@ -930,20 +916,19 @@ with tab_dashboard:
                     st.caption("Standard Wealth Portfolio")
                     mf_pnl_pct = (mf_pnl / mf_inv * 100) if mf_inv > 0 else 0.0
                     st.metric("Current Value", format_inr(mf_val), f"{format_inr(mf_pnl)} ({mf_pnl_pct:+.2f}%)")
-                    st.markdown(f"<span style='color:#808495; font-size:13px;'>Invested: {format_inr(mf_inv)}</span>", unsafe_allow_html=True)
+                    st.markdown(f":gray[Invested: {format_inr(mf_inv)}]")
             col_idx += 1
     else:
         st.info("No active holdings found in your portfolio. Import a Zerodha file to get started!")
 
     st.divider()
 
-# --- SECTION 3: FUNDAMENTAL PART PAYMENTS ---
+    # --- SECTION 3: FUNDAMENTAL PART PAYMENTS ---
     st.subheader("3. 🌱 The Abundance Approach to Part Payments")
     
     with st.container(border=True):
         
         ab_col1, ab_col2 = st.columns(2)
-        
         with ab_col1:
             st.markdown("🌌 **Release Micromanagement:** Stop trying to force the 'how.' Let the universe handle market volatility and macroeconomics while you stay perfectly aligned with your Definite Chief Aim.")
             st.markdown("🌊 **Direct the Creative Flow:** We invest to create, not to compete. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.")
@@ -954,7 +939,6 @@ with tab_dashboard:
         
         st.divider()
 
-        # Header with single consolidated Popover
         hm_col1, hm_col2 = st.columns([3, 1])
         with hm_col1:
             st.markdown("### 🚦 Fundamental Heatmap (Live Market Temperature)")
@@ -983,15 +967,13 @@ with tab_dashboard:
             ("BANKBEES", "Nifty Bank")
         ]
         
-        # Always display all 4 core ETFs
         for etf_sym, index_name in target_etfs:
             f_data = macro_data.get(index_name, {"PE": 0, "PB": 0, "DY": 0})
             v_text, v_color = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
             
             ec1, ec2, ec3, ec4 = st.columns([2, 1, 1, 2])
             with ec1:
-                st.markdown(f"**{etf_sym}**")
-                st.caption(index_name)
+                st.markdown(f"**{etf_sym}**\n\n:gray[{index_name}]")
             with ec2:
                 st.markdown(f":{v_color}[**{f_data['PE']}**]")
             with ec3:
