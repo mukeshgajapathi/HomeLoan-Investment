@@ -983,23 +983,23 @@ with tab_dashboard:
             ("BANKBEES", "Nifty Bank")
         ]
         
+        # Always display all 4 core ETFs
         for etf_sym, index_name in target_etfs:
-            if etf_sym in user_held_etfs or etf_sym == "NIFTYBEES":
-                f_data = macro_data.get(index_name, {"PE": 0, "PB": 0, "DY": 0})
-                v_text, v_color = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
-                
-                ec1, ec2, ec3, ec4 = st.columns([2, 1, 1, 2])
-                with ec1:
-                    st.markdown(f"**{etf_sym}**")
-                    st.caption(index_name)
-                with ec2:
-                    st.markdown(f":{v_color}[**{f_data['PE']}**]")
-                with ec3:
-                    st.markdown(f":{v_color}[**{f_data['PB']}**]")
-                with ec4:
-                    st.markdown(f"{f_data['DY']}%  |  :{v_color}[**{v_text}**]")
-                
-                st.divider()
+            f_data = macro_data.get(index_name, {"PE": 0, "PB": 0, "DY": 0})
+            v_text, v_color = evaluate_index_temp(index_name, f_data["PE"], f_data["PB"], f_data["DY"])
+            
+            ec1, ec2, ec3, ec4 = st.columns([2, 1, 1, 2])
+            with ec1:
+                st.markdown(f"**{etf_sym}**")
+                st.caption(index_name)
+            with ec2:
+                st.markdown(f":{v_color}[**{f_data['PE']}**]")
+            with ec3:
+                st.markdown(f":{v_color}[**{f_data['PB']}**]")
+            with ec4:
+                st.markdown(f"{f_data['DY']}%  |  :{v_color}[**{v_text}**]")
+            
+            st.divider()
 
         st.write("")
         
