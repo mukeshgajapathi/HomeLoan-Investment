@@ -146,11 +146,6 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
 # --- AUTOMATED MACRO & ADVANCED FUNDAMENTALS ENGINE ---
 @st.cache_data(ttl=3600)
 def fetch_live_macro_benchmarks():
-    """
-    Dynamically fetches sovereign 10Y G-Sec yield and Buffett Indicator in real time.
-    Uses multi-source scraping (GuruFocus, Screener Nifty 500 Market Cap / Nominal GDP, MacroMicro)
-    with authoritative market benchmarks to ensure the feed never drops offline.
-    """
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -194,7 +189,6 @@ def fetch_live_macro_benchmarks():
     live_buffett = 0.0
 
     # Source A: Live Total Market Cap from Screener Nifty 500 / India Nominal GDP
-    # Nifty 500 represents >95% of total Indian listed equities market capitalization
     try:
         url_s_mcap = "https://www.screener.in/company/CNX500/"
         r_mcap = requests.get(url_s_mcap, headers=headers, timeout=5)
@@ -204,7 +198,6 @@ def fetch_live_macro_benchmarks():
                 m_cap_match = re.search(r'Market\s*Cap\s*₹?\s*([\d,]+)\s*Cr', r_mcap.text, re.IGNORECASE)
             if m_cap_match:
                 mcap_cr = float(m_cap_match.group(1).replace(',', ''))
-                # India Official MoSPI Nominal GDP is ~₹346.51 Lakh Crore (INR 346,512 Billion)
                 india_nominal_gdp_cr = 34651200.0
                 calc_buffett = (mcap_cr / india_nominal_gdp_cr) * 100.0
                 if 50.0 < calc_buffett < 250.0:
@@ -212,7 +205,7 @@ def fetch_live_macro_benchmarks():
     except Exception:
         pass
 
-    # Source B: GuruFocus Dedicated Country Valuation page
+    # Source B: GuruFocus Country Valuation
     if live_buffett <= 0.0:
         try:
             url_gf = "https://www.gurufocus.com/global-market-valuation.php?country=IND"
@@ -230,7 +223,7 @@ def fetch_live_macro_benchmarks():
         except Exception:
             pass
 
-    # Source C: GuruFocus Economic Indicator Series (Indicator 4324)
+    # Source C: GuruFocus Economic Indicator 4324
     if live_buffett <= 0.0:
         try:
             url_gf_ind = "https://www.gurufocus.com/economic_indicators/4324/india-ratio-of-total-market-cap-over-gdp"
@@ -239,8 +232,6 @@ def fetch_live_macro_benchmarks():
                 match = re.search(r'India Ratio of Total Market Cap over GDP\s*(?::|is currently)\s*([\d\.]+)%', r_ind.text, re.IGNORECASE)
                 if not match:
                     match = re.search(r'Ratio of Total Market Cap over GDP.*?is (?:currently\s*)?([\d\.]+)%', r_ind.text, re.IGNORECASE)
-                if not match:
-                    match = re.search(r'Last Value\s*\|\s*([\d\.]+)%', r_ind.text, re.IGNORECASE)
                 if match:
                     val = float(match.group(1))
                     if 40.0 < val < 300.0:
@@ -248,23 +239,7 @@ def fetch_live_macro_benchmarks():
         except Exception:
             pass
 
-    # Source D: StockManiacs / MacroMicro series
-    if live_buffett <= 0.0:
-        try:
-            url_sm = "https://www.stockmaniacs.net/freebies/free-tools/india-buffett-indicator-today/"
-            r_sm = requests.get(url_sm, headers=headers, timeout=5)
-            if r_sm.status_code == 200:
-                match = re.search(r'market valuation indicator for India is\s*([\d\.]+)%', r_sm.text, re.IGNORECASE)
-                if not match:
-                    match = re.search(r'Buffett Indicator =.*?([\d\.]+)%', r_sm.text, re.IGNORECASE)
-                if match:
-                    val = float(match.group(1))
-                    if 40.0 < val < 300.0:
-                        live_buffett = val
-        except Exception:
-            pass
-
-    # Reliable fallback benchmark so the dashboard never shows an offline error
+    # Fallback benchmark
     if live_buffett <= 0.0:
         live_buffett = 117.1
 
@@ -300,7 +275,6 @@ def fetch_macro_fundamentals():
                     html = resp.text
                     pe_match = re.search(r'P/E\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
                     
-                    # Robust multi-pattern P/B matcher
                     pb_match = re.search(r'Price\s*to\s*[Bb]ook(?:\s*[Vv]alue)?\s*</span>[\s\S]*?class="number">([\d\.]+)', html, re.IGNORECASE)
                     if not pb_match:
                         pb_match = re.search(r'Price\s*to\s*[Bb]ook(?:\s*[Vv]alue)?[\s\S]*?class="[\w\s]*number[\w\s]*">([\d\.]+)', html, re.IGNORECASE)
@@ -328,7 +302,7 @@ def fetch_macro_fundamentals():
             except Exception:
                 pass 
 
-    # Dedicated fallback for Nifty Bank P/B if Screener DOM variations occur
+    # Fallback for Nifty Bank P/B if Screener DOM variations occur
     if fundamentals["Nifty Bank"]["PB"] <= 0.0:
         try:
             url_ib = "https://indexscreener.in/indices/nifty-bank/pb-ratio"
@@ -342,7 +316,6 @@ def fetch_macro_fundamentals():
         except Exception:
             pass
 
-    # Authoritative benchmark fallback for Bank Nifty P/B so it never shows N/A
     if fundamentals["Nifty Bank"]["PB"] <= 0.0:
         fundamentals["Nifty Bank"]["PB"] = 1.64
             
@@ -360,20 +333,52 @@ def evaluate_index_temp(index_name, pe, pb, dy):
         return "⚠️ OFFLINE", "#94A3B8", "rgba(148, 163, 184, 0.12)"
         
     if index_name == "Nifty Bank":
-        if pb > 3.3 or pe > 21.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
-        elif pb > 2.8 or pe > 18.0: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
+        if pb > 3.3 or pe > 21.0: return "🌋 AGGRESSIVE HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
+        elif pb > 2.8 or pe > 18.0: return "🔥 PARTIAL HARVEST", "#F59E0B", "rgba(245, 158, 11, 0.15)"
         elif pb > 2.2 or pe > 15.0: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
         else: return "❄️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
     elif index_name == "Nifty Midcap 150":
-        if pe > 30.0 or pb > 5.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
-        elif pe > 26.0 or pb > 4.0: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
+        if pe > 30.0 or pb > 5.0: return "🌋 AGGRESSIVE HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
+        elif pe > 26.0 or pb > 4.0: return "🔥 PARTIAL HARVEST", "#F59E0B", "rgba(245, 158, 11, 0.15)"
         elif pe > 22.0 or pb > 3.0: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
         else: return "❄️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
     else: 
-        if pe > 26.0 or pb > 4.0: return "🌋 HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
-        elif pe > 24.0 or pb > 3.5: return "🔥 TRIM", "#F59E0B", "rgba(245, 158, 11, 0.15)"
+        if pe > 26.0 or pb > 4.0: return "🌋 AGGRESSIVE HARVEST", "#EF4444", "rgba(239, 68, 68, 0.15)"
+        elif pe > 24.0 or pb > 3.5: return "🔥 PARTIAL HARVEST", "#F59E0B", "rgba(245, 158, 11, 0.15)"
         elif pe > 21.0 or pb > 3.0: return "☀️ HOLD", "#10B981", "rgba(16, 185, 129, 0.15)"
         else: return "❄️ ACCUMULATE", "#38BDF8", "rgba(56, 189, 248, 0.15)"
+
+def get_verdict_rationales(index_name, etf_sym, pe, pb, v_text):
+    if index_name == "Nifty Bank":
+        thresholds = "• ❄️ ACCUMULATE: P/E < 15.0 or P/B < 2.2\n• ☀️ HOLD: P/E 15–18 or P/B 2.2–2.8\n• 🔥 PARTIAL HARVEST: P/E > 18 or P/B > 2.8\n• 🌋 AGGRESSIVE HARVEST: P/E > 21 or P/B > 3.3"
+    elif index_name == "Nifty Midcap 150":
+        thresholds = "• ❄️ ACCUMULATE: P/E < 22.0 or P/B < 3.0\n• ☀️ HOLD: P/E 22–26 or P/B 3.0–4.0\n• 🔥 PARTIAL HARVEST: P/E > 26 or P/B > 4.0\n• 🌋 AGGRESSIVE HARVEST: P/E > 30 or P/B > 5.0"
+    else:
+        thresholds = "• ❄️ ACCUMULATE: P/E < 21.0 or P/B < 3.0\n• ☀️ HOLD: P/E 21–24 or P/B 3.0–3.5\n• 🔥 PARTIAL HARVEST: P/E > 24 or P/B > 3.5\n• 🌋 AGGRESSIVE HARVEST: P/E > 26 or P/B > 4.0"
+
+    if "ACCUMULATE" in v_text:
+        summary = f"{index_name} is currently priced in a strong accumulation bargain zone (P/E: {pe:.1f}, P/B: {pb:.2f}). Prices are historically low relative to corporate earnings and balance-sheet net worth."
+        action = "💡 Action Guidance: High margin of safety. Continue or accelerate SIP accumulation. Avoid trimming or selling units."
+    elif "HOLD" in v_text:
+        summary = f"{index_name} sits squarely within its historical fair value band (P/E: {pe:.1f}, P/B: {pb:.2f}). Growth and current valuations are well-balanced."
+        action = "💡 Action Guidance: Maintain disciplined systematic investing. No immediate need to trim or aggressively buy extra units."
+    elif "PARTIAL HARVEST" in v_text:
+        summary = f"{index_name} valuations have stretched past historical medians (P/E: {pe:.1f}, P/B: {pb:.2f}). Future expected returns compress as valuation multiples outrun earnings."
+        action = "💡 Action Guidance: Apply the 25% Rule. Shave 25% of this holding into Arbitrage funds or route 4% of total corpus to prepay home loan principal at a guaranteed 7.20% return."
+    elif "AGGRESSIVE HARVEST" in v_text:
+        summary = f"{index_name} has entered euphoric / bubble territory (P/E: {pe:.1f}, P/B: {pb:.2f}). Equities offer no risk premium over safe government bonds."
+        action = "💡 Action Guidance: Aggressively lock in gains. Rebalance into risk-free debt reduction and delta-neutral Arbitrage dry powder."
+    else:
+        summary = f"Valuation feeds are currently syncing or offline for {index_name}."
+        action = "💡 Action Guidance: Check back once market feeds reconnect."
+
+    full_help = (
+        f"💡 Why '{v_text}' for {etf_sym} ({index_name})?\n\n"
+        f"{summary}\n\n"
+        f"{action}\n\n"
+        f"📊 Threshold Benchmarks for {index_name}:\n{thresholds}"
+    )
+    return summary, action, full_help
 
 # --- UNIVERSAL HOLDINGS PARSER ---
 def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_id=None):
@@ -444,7 +449,7 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
                             "P&L (₹)": round(qty * (ltp - avg_price), 2)
                         })
         except ImportError:
-            st.error("⚠️️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            st.error("⚠ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
             return client_id, pd.DataFrame()
 
     elif fname.endswith('.CSV'):
@@ -886,7 +891,7 @@ with tab_dashboard:
                     new_ratio = 0.90 if "90%" in selected_stage else (0.95 if "95%" in selected_stage else 1.0)
                     confirm_handover = False
                     if new_ratio == 1.0:
-                        st.warning(f"⚠️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** ({format_inr(full_emi)}) and this edit option will be **permanently locked**.")
+                        st.warning(f"⚠️️ **Warning:** Setting disbursement to 100% marks handover complete. Dues permanently switch to **Full EMI** ({format_inr(full_emi)}) and this edit option will be **permanently locked**.")
                         confirm_handover = st.checkbox("I confirm handover is completed and agree to lock settings.")
                     
                     can_save = (new_ratio < 1.0) or (new_ratio == 1.0 and confirm_handover)
@@ -907,7 +912,7 @@ with tab_dashboard:
         with c2_text:
             st.markdown(f"**Interest Rate**\n\n{current_interest_rate}%\n\n:gray[Floating Rate]")
         with c2_btn:
-            with st.popover("✏️️", help="Update Interest Rate"):
+            with st.popover("✏️", help="Update Interest Rate"):
                 st.markdown("### 🏦 Update Interest Rate")
                 new_rate = st.number_input(
                     "New Annual Interest Rate (%)", 
@@ -1041,11 +1046,11 @@ with tab_dashboard:
             if st.button("Sync Holdings to Sheets", key="btn_sync_holdings"):
                 missing_accounts = [fname for fname, acc in account_mapping.items() if not acc]
                 if input_xirr is None:
-                    st.error("⚠️ Overall Console XIRR (%) is mandatory.")
+                    st.error("⚠️️ Overall Console XIRR (%) is mandatory.")
                 elif not uploaded_files:
-                    st.error("⚠️ Please select at least one holdings file.")
+                    st.error("⚠️️ Please select at least one holdings file.")
                 elif missing_accounts:
-                    st.error(f"⚠️ Specify Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
+                    st.error(f"⚠️️ Specify Account ID for: {', '.join(f'`{f}`' for f in missing_accounts)}")
                 else:
                     parsed_records = []
                     for file in uploaded_files:
@@ -1188,10 +1193,27 @@ with tab_dashboard:
                 roe_approx = ((pb / pe) * 100.0) if (pe > 0 and pb > 0) else 0.0
                 forward_pe = (pe / (1.0 + (growth_rate / 100.0))) if (pe > 0 and growth_rate > 0) else 0.0
                 
-                # Header displays only ETF symbol, index name, and verdict
-                expander_title = f"📈 {etf_sym} ({index_name})  •  {v_text}"
+                # Clean expander title without verdict clutter
+                expander_title = f"📈 {etf_sym} ({index_name})"
 
                 with st.expander(expander_title, expanded=False):
+                    # Verdict banner with explanation and help icon
+                    v_summary, v_action, v_help = get_verdict_rationales(index_name, etf_sym, pe, pb, v_text)
+
+                    v_c1, v_c2 = st.columns([1, 3])
+                    with v_c1:
+                        st.metric(
+                            "Allocation Verdict", 
+                            v_text, 
+                            f"{index_name} Signal",
+                            help=v_help
+                        )
+                    with v_c2:
+                        st.markdown(f"**Why this verdict:** {v_summary}")
+                        st.caption(f"{v_action} *(Hover/tap the ❓ icon on the verdict for institutional threshold benchmarks)*")
+
+                    st.divider()
+
                     # Section 1: Macro & Relative Yield Metrics
                     st.markdown("#### 1. 🌐 Macro & Relative Yield Metrics")
                     m_c1, m_c2, m_c3, m_c4 = st.columns(4)
