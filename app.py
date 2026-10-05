@@ -5,7 +5,6 @@ import math
 import urllib.request
 import json
 import re
-import io
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
@@ -15,7 +14,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- SECURITY / LOGIN WRAPPER ---
 def check_password():
     def password_entered():
         correct_password = str(st.secrets.get("APP_PASSWORD", st.secrets.get("theme", {}).get("APP_PASSWORD", "")))
@@ -41,7 +39,6 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- SAFE CONVERSION HELPERS ---
 def safe_float(val, default=0.0):
     if isinstance(val, pd.Series):
         val = val.iloc[0] if not val.empty else default
@@ -74,10 +71,9 @@ def format_inr(value):
             chunks.reverse()
             formatted = f"{','.join(chunks)},{last_three}"
         return f"-₹{formatted}" if is_negative else f"₹{formatted}"
-    except ValueError:
+    except (ValueError, TypeError):
         return "₹0"
 
-# --- YAHOO FINANCE TICKER MAP FOR ETFS ---
 TICKER_MAP = {
     "NIFTYBEES": "NIFTYBEES.NS",
     "HDFCNIFETF": "HDFCNIFETF.NS",
@@ -98,7 +94,8 @@ TICKER_MAP = {
 
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker, default_price=0.0):
-    if not ticker: return default_price
+    if not ticker:
+        return default_price
     try:
         data = yf.Ticker(ticker)
         try:
@@ -126,13 +123,13 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
     try:
         url_search = f"https://api.mfapi.in/mf/search?q={isin.strip()}"
         req = urllib.request.Request(url_search, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read().decode())
             if isinstance(data, list) and len(data) > 0:
                 scheme_code = data[0]['schemeCode']
                 url_nav = f"https://api.mfapi.in/mf/{scheme_code}"
                 req_nav = urllib.request.Request(url_nav, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req_nav, timeout=5) as resp_nav:
+                with urllib.request.urlopen(req_nav, timeout=3) as resp_nav:
                     nav_json = json.loads(resp_nav.read().decode())
                     if "data" in nav_json and len(nav_json["data"]) > 0:
                         return float(nav_json["data"][0]["nav"])
@@ -140,7 +137,6 @@ def fetch_mf_nav_by_isin(isin, default_nav=0.0):
         pass
     return default_nav
 
-# --- UNIVERSAL HOLDINGS PARSER ---
 def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_id=None):
     file_name_str = filename if filename else getattr(uploaded_file, 'name', str(uploaded_file))
     fname = file_name_str.upper()
@@ -209,7 +205,7 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
                             "P&L (₹)": round(qty * (ltp - avg_price), 2)
                         })
         except ImportError:
-            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt` on GitHub.")
+            st.error("⚠️ The `openpyxl` library is required to read Excel files. Please add `openpyxl` to `requirements.txt`.")
             return client_id, pd.DataFrame()
 
     elif fname.endswith('.CSV'):
@@ -255,14 +251,15 @@ def parse_zerodha_holdings_file(uploaded_file, filename=None, override_account_i
 
     return client_id, pd.DataFrame(records)
 
-# --- AMORTIZATION & PREPAYMENT ENGINE ---
 def calc_rem_months(principal, emi, rate_monthly):
-    if principal <= 0: return 0
+    if principal <= 0:
+        return 0
     try:
         val = 1 - (principal * rate_monthly / emi)
-        if val <= 0: return 9999 
+        if val <= 0:
+            return 9999 
         return -math.log(val) / math.log(1 + rate_monthly)
-    except ValueError:
+    except (ValueError, ZeroDivisionError):
         return 0
 
 def calculate_loan_state(df_loan, initial_loan, current_global_rate):
@@ -316,21 +313,19 @@ def project_ndz_target(current_principal, current_portfolio, current_rate, full_
 
     sim_date = datetime.now()
     handover_date = datetime(2027, 6, 1)
+    months_to_handover = max(0, (handover_date.year - sim_date.year) * 12 + (handover_date.month - sim_date.month))
     months = 0
     
     while port_val < p_bal and months < 360:
         months += 1
-        curr_sim_date = sim_date + pd.DateOffset(months=months)
-        
-        if curr_sim_date < handover_date and not is_handover:
+        if months <= months_to_handover and not is_handover:
             monthly_sip = 0.0
-            loan_interest = p_bal * r_m_loan
         else:
             monthly_sip = max(0.0, 60000.0 - full_emi)
-            loan_interest = p_bal * r_m_loan
-            p_red = max(0.0, full_emi - loan_interest)
-            p_bal = max(0.0, p_bal - p_red)
             
+        loan_interest = p_bal * r_m_loan
+        p_red = max(0.0, full_emi - loan_interest)
+        p_bal = max(0.0, p_bal - p_red)
         port_val = (port_val + monthly_sip) * (1 + r_m_eq)
         
     projected_date = sim_date + pd.DateOffset(months=months)
@@ -341,9 +336,10 @@ LOAN_TENURE_YEARS = 30
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+@st.cache_data(ttl=60)
 def load_data():
     try: 
-        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=0)
+        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=60)
         if not df_portfolio.empty:
             df_portfolio.columns = [str(c).strip().lower() for c in df_portfolio.columns]
             df_portfolio = df_portfolio.loc[:, ~df_portfolio.columns.duplicated()]
@@ -351,7 +347,7 @@ def load_data():
         df_portfolio = pd.DataFrame()
 
     try:
-        df_loan = conn.read(worksheet="Loan_Tracker", ttl=0)
+        df_loan = conn.read(worksheet="Loan_Tracker", ttl=60)
         if not df_loan.empty:
             df_loan.columns = [str(c).strip().lower() for c in df_loan.columns]
             df_loan = df_loan.loc[:, ~df_loan.columns.duplicated()]
@@ -360,7 +356,7 @@ def load_data():
 
     disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = 0.90, False, 7.20, None
     try:
-        df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
+        df_settings = conn.read(worksheet="Loan_Settings", ttl=60)
         if not df_settings.empty:
             df_settings.columns = [str(c).strip().lower() for c in df_settings.columns]
             if "disbursed_ratio" in df_settings.columns and not pd.isna(df_settings.iloc[0]["disbursed_ratio"]):
@@ -380,7 +376,6 @@ def load_data():
 
 df_portfolio_raw, df_loan, disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = load_data()
 
-# Process Holdings Data
 eq_rows = []
 mf_rows = []
 
@@ -394,7 +389,8 @@ if not df_portfolio_raw.empty:
         avg_cost = safe_float(row.get('avg_cost', 0.0))
         last_ltp = safe_float(row.get('current_ltp', 0.0))
         
-        if units <= 0: continue
+        if units <= 0:
+            continue
         
         if asset_class == "Mutual Fund":
             live_nav = fetch_mf_nav_by_isin(isin_val, default_nav=last_ltp)
@@ -418,7 +414,7 @@ if not df_portfolio_raw.empty:
             curr_val = units * ltp
             pnl = curr_val - (units * avg_cost)
             
-            row_dict = {
+            eq_rows.append({
                 "Symbol": sym,
                 "Account": acc,
                 "ISIN": isin_val,
@@ -428,8 +424,7 @@ if not df_portfolio_raw.empty:
                 "Invested_Value": units * avg_cost,
                 "Current_Value": curr_val,
                 "P&L (₹)": pnl
-            }
-            eq_rows.append(row_dict)
+            })
 
 df_eq_active = pd.DataFrame(eq_rows)
 df_mf_active = pd.DataFrame(mf_rows)
@@ -442,7 +437,6 @@ mf_val = df_mf_active["Current_Value"].sum() if not df_mf_active.empty else 0.0
 mf_inv = df_mf_active["Invested_Value"].sum() if not df_mf_active.empty else 0.0
 mf_pnl = df_mf_active["P&L (₹)"].sum() if not df_mf_active.empty else 0.0
 
-# Overall Portfolio integrates ALL assets
 total_portfolio_val = eq_val + mf_val
 total_portfolio_invested = eq_inv + mf_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
@@ -473,7 +467,6 @@ else:
 
 current_rem_months = calc_rem_months(current_principal, full_emi, r_monthly)
 rem_years = current_rem_months / 12
-
 is_ndz_achieved = total_portfolio_val >= current_principal
 
 proj_date, proj_yrs, proj_mos = project_ndz_target(
@@ -482,14 +475,9 @@ proj_date, proj_yrs, proj_mos = project_ndz_target(
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
 
-# ==========================================
-# --- TOP-LEVEL NAVIGATION & TABS ---
-# ==========================================
-
 tab_aim, tab_dashboard = st.tabs(["✨ Definite Chief Aim", "📊 Loan & Investment Dashboard"])
 
 with tab_aim:
-    # --- HERO CARD 1: DEFINITE CHIEF AIM IN LIFE ---
     st.markdown("""
 <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F2027 100%); padding: 28px; border-radius: 18px; border: 1.5px solid #FFD700; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.12); margin-bottom: 25px;">
 <h2 style="color: #FFD700; text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🌟 My Definite Chief Aim in Life</h2>
@@ -521,14 +509,14 @@ with tab_aim:
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Provide more efficient and valuable service joyfully, delivering greater use value than the cash value I receive.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Donate to people in need, contributing to the flow of abundance.</li>
 <li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Celebrate wealth everywhere, knowing the universal supply is limitless.</li>
-<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Maintain unwavering faith and stay persistently invested. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.<li>
+<li style="color: #E2E8F0; font-size: 14.5px; margin-bottom: 0; line-height: 1.5; display: flex; align-items: start; gap: 8px;"><span style="color: #4CC9F0;">✦</span> Maintain unwavering faith and stay persistently invested. Deploying capital into equity actively funds businesses that serve humanity, bringing more use value to the world.</li>
 </ul>
+</div>
 </div>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
-    # --- HERO CARD 2: NAPOLEON HILL'S 5-STEP SELF-CONFIDENCE FORMULA ---
     st.markdown("""
 <div style="background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 50%, #1E293B 100%); padding: 26px; border-radius: 18px; border: 1.5px solid #818CF8; box-shadow: 0 10px 30px rgba(129, 140, 248, 0.12); margin-bottom: 25px;">
 <h2 style="color: #A5B4FC; text-align: center; font-size: 24px; font-weight: 800; margin-bottom: 16px; letter-spacing: 0.5px;">💪 Napoleon Hill's 5-Step Self-Confidence Formula</h2>
@@ -557,23 +545,17 @@ with tab_aim:
 </div>
 """, unsafe_allow_html=True)
 
-    # --- NET-DEBT-ZERO VISUALIZER ON AIM TAB (ALIGNED GOAL STATE) ---
     with st.container(border=True):
         st.markdown("<h3 style='margin-bottom: 0px;'>🎯 Net-Debt-Zero Visualizer</h3>", unsafe_allow_html=True)
-        
         st.progress(1.0)
         st.caption("✨ **100.0% Covered** towards Net-Debt-Zero target | **Goal Fully Manifested**")
-        
         st.success("🎉 **Net-Debt-Zero Fully Achieved:** Living in total financial freedom, peace of mind, and complete abundance!")
-        
         st.divider()
-        
         s_col1, s_col2 = st.columns(2)
         s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
         s_col2.metric("Portfolio Value", "₹1,00,00,000", "1 Cr - Total Financial Abundance")
 
 with tab_dashboard:
-    # --- NET-DEBT-ZERO VISUALIZER ON DASHBOARD TAB (CURRENT REALITY) ---
     with st.container(border=True):
         st.subheader("🎯 Net-Debt-Zero Visualizer")
         net_debt = max(0.0, current_principal - total_portfolio_val)
@@ -607,7 +589,6 @@ with tab_dashboard:
 
     st.divider()
 
-    # --- SECTION 1: STANDARD MONTHLY PAYMENTS ---
     st.subheader(f"1. Standard Monthly Payments ({active_due_label})")
 
     m_col1, m_col2, m_col3 = st.columns(3)
@@ -647,6 +628,7 @@ with tab_dashboard:
                             "Console_XIRR": console_xirr if console_xirr is not None else 0.0
                         }])
                         conn.update(worksheet="Loan_Settings", data=updated_settings)
+                        st.cache_data.clear()
                         st.success("Loan settings updated successfully!")
                         st.rerun()
 
@@ -671,6 +653,7 @@ with tab_dashboard:
                         "Console_XIRR": console_xirr if console_xirr is not None else 0.0
                     }])
                     conn.update(worksheet="Loan_Settings", data=updated_settings)
+                    st.cache_data.clear()
                     st.success(f"Interest rate dynamically updated to {new_rate}%!")
                     st.rerun()
 
@@ -711,13 +694,13 @@ with tab_dashboard:
                 "Interest_Rate": current_interest_rate
             }])
             conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row_emi], ignore_index=True))
+            st.cache_data.clear()
             st.success(f"Logged {current_month_str} payment of {format_inr(expected_loan)} successfully!")
             st.rerun()
 
     if is_current_month_paid:
         st.info(f"✅ Payment for **{current_month_str}** is already logged. Duplicate entries for the same month are blocked.")
 
-    # Principal Cleared Visualizer Card
     with st.container(border=True):
         pct_loan_cleared = (total_principal_cleared / INITIAL_LOAN) if INITIAL_LOAN > 0 else 0.0
         st.markdown(f"**📉 Principal Cleared Tracker** ({pct_loan_cleared * 100:.2f}% of Initial Loan Paid)")
@@ -730,7 +713,6 @@ with tab_dashboard:
 
     st.divider()
 
-    # --- SECTION 2: LIVE PORTFOLIO HOLDINGS & ACTION HEADER ---
     sec2_hdr_col, sec2_act_col = st.columns([3, 1])
 
     with sec2_hdr_col:
@@ -838,14 +820,13 @@ with tab_dashboard:
                         try:
                             conn.update(worksheet="Portfolio_Tracker", data=df_deduped_holdings)
                             
-                            # Save XIRR to Loan_Settings
                             try:
                                 df_settings = conn.read(worksheet="Loan_Settings", ttl=0)
                                 if df_settings.empty:
                                     df_settings = pd.DataFrame([{"Disbursed_Ratio": 0.90, "Handover_Completed": "FALSE", "Interest_Rate": 7.20, "Console_XIRR": input_xirr}])
                                 else:
                                     df_settings.at[0, "Console_XIRR"] = input_xirr
-                                    conn.update(worksheet="Loan_Settings", data=df_settings)
+                                conn.update(worksheet="Loan_Settings", data=df_settings)
                             except Exception:
                                 pass
 
@@ -855,7 +836,6 @@ with tab_dashboard:
                         except Exception as e:
                             st.error(f"Failed to update Google Sheets: {e}")
 
-    # Section 2 UI: Clean Metric Cards (Dynamically hidden if 0)
     st.markdown("<br>", unsafe_allow_html=True)
     
     active_cards = []
@@ -890,12 +870,9 @@ with tab_dashboard:
 
     st.divider()
 
-# --- SECTION 3: INTUITIVE PART PAYMENTS ---
     st.subheader("3. 🌱 The Abundance Approach to Part Payments")
     
     with st.container(border=True):
-        
-        # Enhanced UI: 2-Column layout for crisp, balanced readability
         ab_col1, ab_col2 = st.columns(2)
         
         with ab_col1:
@@ -925,8 +902,8 @@ with tab_dashboard:
                     "Interest_Rate": current_interest_rate
                 }])
                 conn.update(worksheet="Loan_Tracker", data=pd.concat([df_loan, new_row], ignore_index=True))
-                st.success(f"Executed Joyful Part Payment of {format_inr(pp_amount)} successfully!")
                 st.cache_data.clear()
+                st.success(f"Executed Joyful Part Payment of {format_inr(pp_amount)} successfully!")
                 st.rerun()
                 
         with pp_input_col2:
