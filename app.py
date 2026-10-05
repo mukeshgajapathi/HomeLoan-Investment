@@ -14,6 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- SECURITY / LOGIN WRAPPER ---
 def check_password():
     def password_entered():
         correct_password = str(st.secrets.get("APP_PASSWORD", st.secrets.get("theme", {}).get("APP_PASSWORD", "")))
@@ -74,6 +75,7 @@ def format_inr(value):
     except (ValueError, TypeError):
         return "₹0"
 
+# --- YAHOO FINANCE TICKER MAP FOR ETFS ---
 TICKER_MAP = {
     "NIFTYBEES": "NIFTYBEES.NS",
     "HDFCNIFETF": "HDFCNIFETF.NS",
@@ -94,7 +96,7 @@ TICKER_MAP = {
 
 @st.cache_data(ttl=1800)
 def fetch_live_ltp(ticker, default_price=0.0):
-    if not ticker:
+    if not ticker: 
         return default_price
     try:
         data = yf.Ticker(ticker)
@@ -334,12 +336,16 @@ def project_ndz_target(current_principal, current_portfolio, current_rate, full_
 INITIAL_LOAN = 4890000.0
 LOAN_TENURE_YEARS = 30
 
-conn = st.connection("gsheets", type=GSheetsConnection)
+@st.cache_resource
+def get_gsheets_connection():
+    return st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=60)
+conn = get_gsheets_connection()
+
+@st.cache_data(ttl=120)
 def load_data():
     try: 
-        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=60)
+        df_portfolio = conn.read(worksheet="Portfolio_Tracker", ttl=120)
         if not df_portfolio.empty:
             df_portfolio.columns = [str(c).strip().lower() for c in df_portfolio.columns]
             df_portfolio = df_portfolio.loc[:, ~df_portfolio.columns.duplicated()]
@@ -347,7 +353,7 @@ def load_data():
         df_portfolio = pd.DataFrame()
 
     try:
-        df_loan = conn.read(worksheet="Loan_Tracker", ttl=60)
+        df_loan = conn.read(worksheet="Loan_Tracker", ttl=120)
         if not df_loan.empty:
             df_loan.columns = [str(c).strip().lower() for c in df_loan.columns]
             df_loan = df_loan.loc[:, ~df_loan.columns.duplicated()]
@@ -356,7 +362,7 @@ def load_data():
 
     disbursed_ratio, is_handover_completed, current_interest_rate, console_xirr = 0.90, False, 7.20, None
     try:
-        df_settings = conn.read(worksheet="Loan_Settings", ttl=60)
+        df_settings = conn.read(worksheet="Loan_Settings", ttl=120)
         if not df_settings.empty:
             df_settings.columns = [str(c).strip().lower() for c in df_settings.columns]
             if "disbursed_ratio" in df_settings.columns and not pd.isna(df_settings.iloc[0]["disbursed_ratio"]):
@@ -442,7 +448,6 @@ total_portfolio_invested = eq_inv + mf_inv
 overall_pnl = total_portfolio_val - total_portfolio_invested
 overall_pnl_pct = (overall_pnl / total_portfolio_invested * 100) if total_portfolio_invested > 0 else 0.0
 
-# Loan calculations
 current_principal, total_principal_cleared, emi_principal_cleared, prepay_principal_cleared = calculate_loan_state(
     df_loan, INITIAL_LOAN, current_interest_rate
 )
@@ -889,7 +894,7 @@ with tab_dashboard:
         
         with pp_input_col1:
             st.markdown("### 💸 Execute Part Payment")
-            pp_amount = st.number_input("Prepayment Amount (₹)", value=100000.0, step=10000.0, min_value=1.0)
+            pp_amount = st.number_input("Prepayment Amount (₹)", value=100000.0, step=10000.0, min_value=0.0)
             
             if st.button("Log Joyful Part Payment", type="primary"):
                 new_row = pd.DataFrame([{
