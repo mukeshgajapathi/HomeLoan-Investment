@@ -9,8 +9,6 @@ import io
 import requests
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
-from html import escape as html_escape
-from textwrap import dedent
 
 st.set_page_config(
     page_title="Home Loan & Investment Tracker", 
@@ -721,12 +719,6 @@ proj_date, proj_yrs, proj_mos = project_ndz_target(
 )
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
-# Visible deployment check: if this banner is missing, Streamlit is running a different file/old version.
-st.info(
-    "🌱 **Creative Use-Value is installed!** Explore the 6 forms of creative effort "
-    "behind your 23 selected investments in the **🌱 Creative Use-Value** tab below. "
-    "(Dashboard build: Creative Plane v2)"
-)
 
 st.markdown("""
 <style>
@@ -758,7 +750,7 @@ div[data-testid="stExpander"] summary p {
 # --- TOP-LEVEL NAVIGATION & TABS ---
 # ==========================================
 
-tab_aim, tab_creative, tab_dashboard = st.tabs(["✨ Definite Chief Aim", "🌱 Creative Use-Value", "📊 Loan & Investment Dashboard"])
+tab_aim, tab_dashboard = st.tabs(["✨ Definite Chief Aim", "📊 Loan & Investment Dashboard"])
 
 with tab_aim:
     st.markdown("""
@@ -836,178 +828,6 @@ with tab_aim:
         s_col1, s_col2 = st.columns(2)
         s_col1.metric("Principal Pending", "₹0", "100.0% Loan Cleared")
         s_col2.metric("Portfolio Value", "₹1,00,00,000", "1 Cr - Total Financial Abundance")
-
-# ==========================================
-# --- CREATIVE PLANE: 23 SELECTED INVESTMENTS ---
-# ==========================================
-# Static, values-oriented descriptions rather than price/return scores.
-# Keep the six themes and holdings here separate from the Google Sheets
-# transaction tracker; selecting a business does not imply it is purchased.
-CREATIVE_USE_VALUE_GROUPS = [
-    {
-        "title": "Heal", "icon": "🩺", "accent": "#34D399",
-        "purpose": "Develop and distribute treatments that alleviate suffering and support healthier lives.",
-        "investments": [
-            ("DIVISLAB", "Produces pharmaceutical ingredients that help other manufacturers make medicines."),
-            ("DRREDDY", "Develops and supplies medicines, including generics that improve treatment access."),
-            ("ZYDUSLIFE", "Researches and produces treatments that support patients' health."),
-            ("PHARMABEES", "Provides diversified exposure to pharmaceutical businesses and their healthcare contributions."),
-        ],
-    },
-    {
-        "title": "Build", "icon": "🏗️", "accent": "#FBBF24",
-        "purpose": "Create infrastructure, tools and materials that expand society's productive capabilities.",
-        "investments": [
-            ("LT", "Engineers and constructs transport, energy, water and industrial infrastructure."),
-            ("ACE", "Makes cranes and material-handling equipment for safer, more efficient construction."),
-            ("ASTRAL", "Supplies pipes and plumbing systems for water distribution and sanitation."),
-            ("POLYCAB", "Makes cables and wires that bring electricity to homes, services and industry."),
-            ("INFRABEES", "Provides diversified exposure to businesses building and operating infrastructure."),
-        ],
-    },
-    {
-        "title": "Energise", "icon": "⚡", "accent": "#60A5FA",
-        "purpose": "Provide the dependable electricity and industrial power that essential activities require.",
-        "investments": [
-            ("ABB", "Improves electrification, industrial automation and efficient power use."),
-            ("GVT&D", "Makes equipment for reliable electricity transmission and distribution."),
-            ("SIEMENS", "Builds automation, electrification and smart infrastructure technologies."),
-            ("CUMMINSIND", "Supplies engines and power systems for dependable industrial and backup power."),
-        ],
-    },
-    {
-        "title": "Nourish", "icon": "🌾", "accent": "#A3E635",
-        "purpose": "Improve agricultural productivity and the movement of water that supports farms and communities.",
-        "investments": [
-            ("M&M", "Produces tractors and mobility solutions that support farmers and communities."),
-            ("SWARAJENG", "Manufactures tractor engines that power agricultural mechanisation."),
-            ("KSB", "Develops pumping and fluid-control systems for water, irrigation and industry."),
-            ("OSWALPUMPS", "Provides water pumps, including solar-powered irrigation solutions."),
-        ],
-    },
-    {
-        "title": "Innovate and enable", "icon": "💡", "accent": "#C4B5FD",
-        "purpose": "Make useful industrial, digital and specialised processes more capable and efficient.",
-        "investments": [
-            ("ITBEES", "Provides diversified exposure to IT companies helping organisations digitise and automate."),
-            ("CLEAN", "Develops specialty chemicals and more efficient manufacturing processes."),
-            ("INOXINDIA", "Makes cryogenic systems for storing and transporting specialised gases."),
-            ("BANKBEES", "Provides exposure to banks that enable savings, payments and productive credit."),
-        ],
-    },
-    {
-        "title": "Connect and protect", "icon": "🛡️", "accent": "#F9A8D4",
-        "purpose": "Support mobility, security and the ability of people and communities to carry out daily life.",
-        "investments": [
-            ("AUTOBEES", "Provides diversified exposure to mobility and transportation manufacturers."),
-            ("MODEFENCE", "Provides exposure to defence engineering, security and deterrence capabilities."),
-        ],
-    },
-]
-
-with tab_creative:
-    st.markdown(dedent("""
-    <style>
-    .creative-hero {
-        background: linear-gradient(120deg, #102B2C 0%, #12233C 62%, #2A2440 100%);
-        border: 1px solid rgba(94, 234, 212, 0.30);
-        border-radius: 18px;
-        padding: 28px 30px;
-        margin: 6px 0 24px 0;
-        color: #F8FAFC;
-    }
-    .creative-hero .eyebrow {
-        color: #86EFAC; font-size: 12px; text-transform: uppercase;
-        letter-spacing: 2px; font-weight: 800; margin-bottom: 9px;
-    }
-    .creative-hero h2 { color: #F8FAFC; margin: 0 0 10px 0; font-size: 29px; }
-    .creative-hero p { color: #CBD5E1; font-size: 16px; line-height: 1.7; margin: 0; }
-    .creative-hero .creative-note {
-        margin-top: 18px; border-left: 3px solid #86EFAC;
-        padding-left: 14px; color: #D1FAE5; font-style: italic;
-    }
-    .creative-card {
-        border-radius: 16px; border: 1px solid rgba(148,163,184,0.2);
-        background: linear-gradient(150deg, #182537, #111D2E);
-        border-top: 3px solid var(--theme-accent);
-        padding: 22px; min-height: 244px; margin-bottom: 8px;
-        box-shadow: 0 5px 18px rgba(0,0,0,.10);
-    }
-    .creative-card-top {
-        display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 8px;
-    }
-    .creative-icon { font-size: 28px; }
-    .creative-number { color: #94A3B8; font-size: 12px; letter-spacing: 1px; }
-    .creative-title { color: #F8FAFC; font-size: 21px; font-weight: 780; margin-bottom: 9px; }
-    .creative-description { color: #CBD5E1; font-size: 14px; line-height: 1.65; min-height: 68px; }
-    .creative-tickers { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; }
-    .creative-ticker {
-        background: rgba(148,163,184,.13); border: 1px solid rgba(148,163,184,.19);
-        color: #E2E8F0; border-radius: 7px; padding: 5px 8px;
-        font-size: 11px; font-weight: 700; letter-spacing: .2px;
-    }
-    @media (max-width: 720px) {
-        .creative-hero { padding: 20px; }
-        .creative-hero h2 { font-size: 24px; }
-        .creative-card { min-height: unset; }
-        .creative-description { min-height: unset; }
-    }
-    </style>
-    <div class="creative-hero">
-      <div class="eyebrow">My investment philosophy · The Creative Plane</div>
-      <h2>🌱 The Use-Value Behind My 23 Investments</h2>
-      <p>Six forms of creative effort: healing, building, energising, nourishing,
-      innovating and protecting. These are the useful contributions I choose to appreciate.</p>
-      <p class="creative-note">I focus on the value created for people, not on predicting
-      the financial outcome. Patient ownership, discernment and gratitude guide my actions.</p>
-    </div>
-    """), unsafe_allow_html=True)
-
-    count_col1, count_col2, count_col3 = st.columns(3)
-    count_col1.metric("Creative themes", len(CREATIVE_USE_VALUE_GROUPS))
-    etf_symbols = {"BANKBEES", "ITBEES", "PHARMABEES", "INFRABEES", "AUTOBEES", "MODEFENCE"}
-    symbols_in_themes = {
-        symbol for group in CREATIVE_USE_VALUE_GROUPS
-        for symbol, _ in group["investments"]
-    }
-    count_col2.metric("Sector ETFs", len(symbols_in_themes & etf_symbols))
-    count_col3.metric("Selected companies", len(symbols_in_themes - etf_symbols))
-
-    st.write("")
-    for start_idx in range(0, len(CREATIVE_USE_VALUE_GROUPS), 2):
-        two_columns = st.columns(2, gap="large")
-        for col, idx in zip(two_columns, range(start_idx, min(start_idx + 2, len(CREATIVE_USE_VALUE_GROUPS)))):
-            group = CREATIVE_USE_VALUE_GROUPS[idx]
-            with col:
-                # Local data only; escaped when inserted into HTML.
-                badges = "".join(
-                    f'<span class="creative-ticker">{html_escape(symbol)}</span>'
-                    for symbol, _ in group["investments"]
-                )
-                st.markdown(dedent(f"""
-                <div class="creative-card" style="--theme-accent:{group['accent']}">
-                  <div class="creative-card-top">
-                    <span class="creative-icon">{group['icon']}</span>
-                    <span class="creative-number">{idx+1:02d} / 06</span>
-                  </div>
-                  <div class="creative-title">{html_escape(group['title'])}</div>
-                  <div class="creative-description">{html_escape(group['purpose'])}</div>
-                  <div class="creative-tickers">{badges}</div>
-                </div>
-                """), unsafe_allow_html=True)
-                with st.expander(f"What each of these {len(group['investments'])} investments enables"):
-                    for symbol, contribution in group["investments"]:
-                        st.markdown(f"**{symbol}** — {contribution}")
-
-    st.caption(
-        "These are descriptions of intended social and economic use-value, not "
-        "independent ethical certifications or guarantees that every business activity is harmless. "
-        "The selection is your chosen 17 companies and 6 sector ETFs, not a live holdings report."
-    )
-    st.markdown(
-        "*🌿 My contribution is to choose consciously, remain patient, and appreciate the useful work being done.*"
-    )
 
 with tab_dashboard:
     with st.container(border=True):
