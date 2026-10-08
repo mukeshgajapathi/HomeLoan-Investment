@@ -721,6 +721,12 @@ proj_date, proj_yrs, proj_mos = project_ndz_target(
 )
 
 st.title("🏡 Home Loan & 📈 Investment Tracker")
+# Visible deployment check: if this banner is missing, Streamlit is running a different file/old version.
+st.info(
+    "🌱 **Creative Use-Value is installed!** Explore the 6 forms of creative effort "
+    "behind your 23 selected investments in the **🌱 Creative Use-Value** tab below. "
+    "(Dashboard build: Creative Plane v2)"
+)
 
 st.markdown("""
 <style>
